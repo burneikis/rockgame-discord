@@ -1,8 +1,20 @@
 # Rock Game - Discord Activity
 
+![Rock Game](art/cover.png)
+
 Unofficial 3D fan implementation of *Gravitas* for Discord Activity. Not
 affiliated with or endorsed by the makers of Gravitas. Rules are in
 [RULES.md](RULES.md).
+
+## Screenshots
+
+| Placing a stone | A shaky tower |
+|---|---|
+| ![Placing a stone: the green ghost shows where it will land](docs/screenshots/placing.png) | ![Mid-game tower on the Stump base](docs/screenshots/tower.png) |
+
+<p align="center">
+  <img src="docs/screenshots/lobby.png" width="360" alt="Lobby with bots, stone set, base rock and turn timer options">
+</p>
 
 ## Quick start
 
@@ -127,3 +139,11 @@ Discord credentials are not set; set `ALLOW_GUESTS=1` to allow them anyway.
 own stones, base, table and die (towers stacked with the real physics). To
 re-render: run `npx vite` and Chrome with remote debugging on :9222, then
 `node art/shoot.mjs [cover|bg|icon]`.
+
+<p>
+  <img src="art/icon.png" width="160" alt="Activity icon">
+  <img src="art/background.png" width="480" alt="Activity background">
+</p>
+
+The screenshots in `docs/screenshots/` are from a real 3-player game
+(1 human, 2 bots) at 1600x900.
