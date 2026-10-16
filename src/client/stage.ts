@@ -17,7 +17,7 @@ export type StageMode =
   | {
       kind: 'place';
       stone: Stone;
-      onPlace: (x: number, z: number, q: Pose['q']) => void;
+      onPlace: (x: number, z: number, q: Pose['q'], aimY?: number) => void;
       onAim: (pose: Pose | null) => void;
     }
   | { kind: 'pickup'; onPick: (id: number) => void };
@@ -180,6 +180,8 @@ export class Stage {
   private known = new Map<number, StoneKind>();
   private ghostPose: Pose | null = null;
   private aimXZ: [number, number] | null = null;
+  /** Height of the surface under the pointer, so stones can go under overhangs. */
+  private aimY: number | undefined = undefined;
   private yaw = 0;
   private tilt = 0;
   private otherGhost: THREE.Mesh | null = null;
@@ -429,7 +431,7 @@ export class Stage {
   /** Drop the ghost where it is (the touch-screen Drop button). */
   drop() {
     if (this.mode.kind !== 'place' || !this.ghostPose || !this.aimXZ) return;
-    this.mode.onPlace(this.aimXZ[0], this.aimXZ[1], this.ghostPose.q);
+    this.mode.onPlace(this.aimXZ[0], this.aimXZ[1], this.ghostPose.q, this.aimY);
   }
 
   /** Show another player's stone hovering where they aim. */
@@ -463,7 +465,7 @@ export class Stage {
       return;
     }
     const [x, z] = this.aimXZ;
-    const pose = this.sim.dropPose(mode.stone, x, z, q);
+    const pose = this.sim.dropPose(mode.stone, x, z, q, this.aimY);
     const mat = this.ghost.material as THREE.MeshStandardMaterial;
     this.ghost.visible = true;
     if (pose) {
@@ -497,6 +499,7 @@ export class Stage {
       const plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
       point = this.raycaster.ray.intersectPlane(plane, new THREE.Vector3());
     }
+    this.aimY = hit?.point.y;
     this.aimXZ = point && Math.hypot(point.x, point.z) < outlineRadius(baseOutline(this.baseId)) + 3 ? [point.x, point.z] : null;
     this.recomputeGhost();
   }

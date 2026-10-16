@@ -21,7 +21,8 @@ export interface PlayerState { id: string; name: string; isBot: boolean; supply:
 
 export type Action =
   | { kind: 'roll' }
-  | { kind: 'place'; stoneId: number; x: number; z: number; q: Pose['q'] }
+  /** `y`: height of the aimed-at surface, to slide the stone under an overhang. */
+  | { kind: 'place'; stoneId: number; x: number; z: number; q: Pose['q']; y?: number }
   | { kind: 'pickup'; stoneId: number };
 
 type EventBody =
@@ -140,7 +141,7 @@ export class Game {
         if (!this.allowed().includes(stone)) return `That stone doesn't fit: ${this.remaining} to place`;
         const q = normalizeQuat(action.q);
         if (!q) return 'Bad rotation';
-        const pose = this.sim.dropPose(stone, action.x, action.z, q);
+        const pose = this.sim.dropPose(stone, action.x, action.z, q, typeof action.y === 'number' ? action.y : undefined);
         if (!pose) return 'Place it on the base or the tower';
         me.supply = me.supply.filter((s) => s !== stone);
         this.tower.set(stone.id, stone);

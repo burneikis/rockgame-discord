@@ -194,7 +194,7 @@ export function Table({ state, game, send, subscribe }: { state: StateMessage; g
         kind: 'place',
         stone,
         onAim: (pose) => sendAim(chosenId, pose),
-        onPlace: (x, z, q) => send({ type: 'act', action: { kind: 'place', stoneId: chosenId, x, z, q } }),
+        onPlace: (x, z, q, y) => send({ type: 'act', action: { kind: 'place', stoneId: chosenId, x, z, q, y } }),
       };
     } else if (picking) {
       mode = { kind: 'pickup', onPick: (stoneId) => send({ type: 'act', action: { kind: 'pickup', stoneId } }) };

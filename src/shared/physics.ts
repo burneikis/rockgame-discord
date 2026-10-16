@@ -20,6 +20,8 @@ const RESTITUTION = 0.05;
 const DENSITY = 2.5;
 /** Stones are spawned this far above where they would touch down. */
 export const DROP_GAP = 0.02;
+/** Height step when searching for a free spot above an aimed-at surface. */
+const AIM_STEP = 0.05;
 /** How far out (from the centre) a stone may be placed or roll before it is out of play. */
 const OUT_OF_BOUNDS = 25;
 
@@ -169,22 +171,45 @@ export class Sim {
    * Where a stone held at (x, z) with rotation q comes to rest if lowered
    * straight down: just above the first thing it touches. Null when it would
    * miss the base and the tower (land on the table) or is out of reach.
+   *
+   * With `aimY` (the height of the surface the player pointed at) the stone
+   * is lowered from the lowest free spot just above that surface instead of
+   * from above the whole tower, so it can be slid under an overhang. If it
+   * doesn't fit there, it is lifted until it does (worst case: the top).
    */
-  dropPose(ref: StoneRef, x: number, z: number, q: Pose['q']): Pose | null {
+  dropPose(ref: StoneRef, x: number, z: number, q: Pose['q'], aimY?: number): Pose | null {
     if (!Number.isFinite(x) || !Number.isFinite(z) || Math.hypot(x, z) > OUT_OF_BOUNDS) return null;
-    const startY = this.topY() + boundingRadius(ref) + 1;
+    const r = boundingRadius(ref);
+    const topStart = this.topY() + r + 1;
     const rot = { x: q[0], y: q[1], z: q[2], w: q[3] };
     const cast = colliderDesc(ref).shape;
-    // Test every collider directly: the world's broad phase only catches up
-    // on the next step, so a world query would miss freshly added stones.
-    let best: { toi: number; collider: RAPIER.Collider } | null = null;
-    const still = { x: 0, y: 0, z: 0 };
     this.world.propagateModifiedBodyPositionsToColliders();
-    this.world.forEachCollider((c) => {
-      const hit = c.castShape(still, cast, { x, y: startY, z }, rot, { x: 0, y: -1, z: 0 }, 0, startY + 10, true);
-      if (hit && (!best || hit.time_of_impact < best.toi)) best = { toi: hit.time_of_impact, collider: c };
-    });
-    const hit = best as { toi: number; collider: RAPIER.Collider } | null;
+    const tryFrom = (startY: number) => {
+      // Test every collider directly: the world's broad phase only catches up
+      // on the next step, so a world query would miss freshly added stones.
+      let best: { toi: number; collider: RAPIER.Collider } | null = null;
+      const still = { x: 0, y: 0, z: 0 };
+      this.world.forEachCollider((c) => {
+        const hit = c.castShape(still, cast, { x, y: startY, z }, rot, { x: 0, y: -1, z: 0 }, 0, startY + 10, true);
+        if (hit && (!best || hit.time_of_impact < best.toi)) best = { toi: hit.time_of_impact, collider: c };
+      });
+      return best as { toi: number; collider: RAPIER.Collider } | null;
+    };
+    let startY = topStart;
+    let hit: { toi: number; collider: RAPIER.Collider } | null = null;
+    if (aimY !== undefined && Number.isFinite(aimY)) {
+      // Climb from just above the aimed surface to the first spot where the
+      // stone isn't already overlapping something.
+      for (let y = Math.max(aimY, FALL_Y) + r + DROP_GAP; y < topStart; y += AIM_STEP) {
+        const h = tryFrom(y);
+        if (h && h.toi > 1e-4) {
+          startY = y;
+          hit = h;
+          break;
+        }
+      }
+    }
+    hit ??= tryFrom(startY);
     if (!hit || hit.collider.handle === this.table) return null;
     const hitBody = hit.collider.parent();
     for (const [id, e] of this.stones) if (e.body === hitBody?.handle && this.isFallen(id)) return null;

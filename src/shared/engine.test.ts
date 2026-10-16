@@ -1,11 +1,12 @@
 import { beforeAll, describe, expect, it } from 'vitest';
 import { Game } from './engine';
 import { botAction } from './bot';
-import { initPhysics } from './physics';
+import { Sim, initPhysics } from './physics';
 import {
   BASES,
   BASE_HEIGHT,
   BASE_IDS,
+  THICK,
   GEOMETRY,
   PENTAGON_MAX_AREA,
   PENTAGON_MIN_AREA,
@@ -149,6 +150,20 @@ describe('stones and bases', () => {
     expect(g.sim.dropPose('cube', 1.2, 0, [0, 0, 0, 1])).not.toBeNull();
     expect(g.sim.dropPose('cube', 0, 1.2, [0, 0, 0, 1])).toBeNull();
     g.dispose();
+  });
+
+  it('can slide a stone under an overhang when aiming low', () => {
+    const sim = Sim.create('boulder');
+    // A square held up 1.0 above the base: room for a flat circle under it.
+    sim.add(1, 'square', { p: [0, 1, 0], q: [0, 0, 0, 1] }, true);
+    const flat: [number, number, number, number] = [0, 0, 0, 1];
+    const top = sim.dropPose('circle', 0, 0, flat)!;
+    expect(top.p[1]).toBeGreaterThan(1);
+    const under = sim.dropPose('circle', 0, 0, flat, 0)!;
+    expect(under.p[1]).toBeLessThan(0.5);
+    // Aiming at the square's top still lands on top.
+    expect(sim.dropPose('circle', 0, 0, flat, 1 + THICK / 2)!.p[1]).toBeGreaterThan(1);
+    sim.free();
   });
 });
 
