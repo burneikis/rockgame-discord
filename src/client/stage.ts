@@ -72,7 +72,7 @@ function polygonGeometry(points: [number, number][], bottom: number, top: number
   return geo;
 }
 
-function baseGeometry(id: BaseId): THREE.BufferGeometry {
+export function baseGeometry(id: BaseId): THREE.BufferGeometry {
   const o = baseOutline(id);
   if (o.kind === 'polygon') return polygonGeometry(o.points, -BASE_HEIGHT, 0);
   const geo = new THREE.CylinderGeometry(o.radius, o.radius * 1.04, BASE_HEIGHT, 96);
@@ -80,7 +80,7 @@ function baseGeometry(id: BaseId): THREE.BufferGeometry {
   return geo;
 }
 
-function noiseTexture(size: number, base: [number, number, number], spread: number, veins: number, seed = 1): THREE.CanvasTexture {
+export function noiseTexture(size: number, base: [number, number, number], spread: number, veins: number, seed = 1): THREE.CanvasTexture {
   const c = document.createElement('canvas');
   c.width = c.height = size;
   const ctx = c.getContext('2d')!;
@@ -113,7 +113,7 @@ function noiseTexture(size: number, base: [number, number, number], spread: numb
 }
 
 /** Light oak planks with grain. */
-function woodTexture(): THREE.CanvasTexture {
+export function woodTexture(): THREE.CanvasTexture {
   const size = 512;
   const c = document.createElement('canvas');
   c.width = c.height = size;

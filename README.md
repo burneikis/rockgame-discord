@@ -116,3 +116,11 @@ server (settings in `.deploy.env`, see `deploy.env.example`).
 
 Guests (browser players without Discord) are allowed in dev mode or when
 Discord credentials are not set; set `ALLOW_GUESTS=1` to allow them anyway.
+
+### Activity art
+
+`art/cover.png` (1920x1080), `art/background.png` (1920x1080) and
+`art/icon.png` (1024x1024) are rendered from `art/art.html` with the game's
+own stones, base, table and die (towers stacked with the real physics). To
+re-render: run `npx vite` and Chrome with remote debugging on :9222, then
+`node art/shoot.mjs [cover|bg|icon]`.
