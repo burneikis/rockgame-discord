@@ -1,6 +1,6 @@
 import type { Action, Game } from './engine';
 import { Sim } from './physics';
-import { BASE_RADIUS, VALUE, placementRotation, type Pose, type Shape, type Stone } from './stones';
+import { VALUE, baseOutline, outlineRadius, placementRotation, type Pose, type Shape, type Stone } from './stones';
 
 /**
  * Bot: tries candidate moves in cloned physics worlds and keeps the one that
@@ -40,7 +40,7 @@ function placeAction(game: Game, rand: () => number): Action {
   // Spots to try: the base, and on top of every stone.
   const spots: [number, number][] = [[0, 0]];
   for (let i = 0; i < 6; i++) {
-    const r = Math.sqrt(rand()) * BASE_RADIUS * 0.7;
+    const r = Math.sqrt(rand()) * outlineRadius(baseOutline(game.options.base)) * 0.7;
     const a = rand() * Math.PI * 2;
     spots.push([r * Math.cos(a), r * Math.sin(a)]);
   }

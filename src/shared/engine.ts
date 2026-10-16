@@ -1,8 +1,8 @@
 import { Sim, normalizeQuat } from './physics';
-import { VALUE, allowedStones, canMake, startingSupply, type Pose, type Stone } from './stones';
+import { VALUE, allowedStones, canMake, startingSupply, type BaseId, type Pose, type Stone } from './stones';
 
 /**
- * Server-authoritative Gravitas rules. The physics simulation is part of the
+ * Server-authoritative Rock Game rules. The physics simulation is part of the
  * game state: placing or picking up a stone puts the game in the 'settling'
  * step, and the server calls update() every physics tick until the tower is
  * still again, then resolves what fell.
@@ -13,6 +13,8 @@ export type Step = 'roll' | 'place' | 'pickup' | 'settling' | 'over';
 export interface GameOptions {
   /** Sets of stones per player: 1 (6 stones) or 2 (tournament, 12 stones). */
   sets: number;
+  /** Which base rock the tower is built on. */
+  base: BaseId;
 }
 
 export interface PlayerState { id: string; name: string; isBot: boolean; supply: Stone[] }
@@ -45,7 +47,7 @@ const MAX_SETTLE_TICKS = 60 * 8;
 export class Game {
   readonly players: PlayerState[];
   readonly options: GameOptions;
-  readonly sim = Sim.create();
+  readonly sim: Sim;
   /** Stones on the tower (or fallen, until collected). */
   readonly tower = new Map<number, Stone>();
   turn = 0;
@@ -65,6 +67,7 @@ export class Game {
 
   constructor(members: { id: string; name: string; isBot: boolean }[], options: GameOptions, private rand: () => number = Math.random) {
     this.options = options;
+    this.sim = Sim.create(options.base);
     this.players = members.map((m) => ({ ...m, supply: startingSupply(options.sets, () => this.nextStoneId++) }));
     this.turn = Math.floor(this.rand() * this.players.length);
     this.say(`${this.current.name} goes first.`);

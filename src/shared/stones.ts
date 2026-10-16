@@ -23,18 +23,80 @@ export interface Stone { id: number; shape: Shape }
 /** Slab thickness of the flat stones. */
 export const THICK = 0.3;
 
+/** A flat outline in the x/z plane: a circle or a convex polygon. */
+export type Outline = { kind: 'circle'; radius: number } | { kind: 'polygon'; points: [number, number][] };
+
 export type Geometry =
   | { kind: 'cylinder'; radius: number; height: number }
   | { kind: 'box'; hx: number; hy: number; hz: number }
   /** Regular n-sided prism; vertex k sits at angle 2*pi*k/n, x = r sin, z = r cos (like three's CylinderGeometry). */
-  | { kind: 'prism'; sides: number; radius: number; height: number };
+  | { kind: 'prism'; sides: number; radius: number; height: number }
+  /** Prism of any convex outline (x, z points), centred on its centroid. */
+  | { kind: 'polygon'; points: [number, number][]; height: number };
+
+export function polygonArea(points: [number, number][]): number {
+  let a = 0;
+  for (let i = 0; i < points.length; i++) {
+    const [x1, z1] = points[i];
+    const [x2, z2] = points[(i + 1) % points.length];
+    a += x1 * z2 - x2 * z1;
+  }
+  return Math.abs(a) / 2;
+}
+
+/** Shift a polygon so its centroid is at the origin, optionally scaling it. */
+export function centred(points: [number, number][], scale = 1): [number, number][] {
+  let a = 0;
+  let cx = 0;
+  let cz = 0;
+  for (let i = 0; i < points.length; i++) {
+    const [x1, z1] = points[i];
+    const [x2, z2] = points[(i + 1) % points.length];
+    const cross = x1 * z2 - x2 * z1;
+    a += cross;
+    cx += (x1 + x2) * cross;
+    cz += (z1 + z2) * cross;
+  }
+  cx /= 3 * a;
+  cz /= 3 * a;
+  return points.map(([x, z]) => [(x - cx) * scale, (z - cz) * scale]);
+}
+
+export function isConvex(points: [number, number][]): boolean {
+  let sign = 0;
+  for (let i = 0; i < points.length; i++) {
+    const [ax, az] = points[i];
+    const [bx, bz] = points[(i + 1) % points.length];
+    const [cx, cz] = points[(i + 2) % points.length];
+    const cross = (bx - ax) * (cz - bz) - (bz - az) * (cx - bx);
+    if (cross === 0) continue;
+    if (sign === 0) sign = Math.sign(cross);
+    else if (Math.sign(cross) !== sign) return false;
+  }
+  return true;
+}
+
+/** Points of an ellipse at the given angles (degrees), sheared for a lopsided look. Always convex. */
+function ellipse(a: number, b: number, degrees: number[], shear = 0): [number, number][] {
+  return degrees.map((d) => {
+    const t = (d * Math.PI) / 180;
+    const x = a * Math.cos(t);
+    const z = b * Math.sin(t);
+    return [x + shear * z, z];
+  });
+}
 
 export const GEOMETRY: Record<Shape, Geometry> = {
   circle: { kind: 'cylinder', radius: 0.55, height: THICK },
-  shaft: { kind: 'box', hx: 1.1, hy: 0.16, hz: 0.16 },
+  shaft: { kind: 'box', hx: 0.75, hy: 0.16, hz: 0.16 },
   triangle: { kind: 'prism', sides: 3, radius: 0.78, height: THICK },
   square: { kind: 'box', hx: 0.55, hy: THICK / 2, hz: 0.55 },
-  pentagon: { kind: 'prism', sides: 5, radius: 0.68, height: THICK },
+  // The odd one out: a lopsided pentagon with one short side and uneven corners.
+  pentagon: {
+    kind: 'polygon',
+    points: centred([[0.15, 0.78], [0.62, 0.52], [0.66, -0.5], [-0.35, -0.72], [-0.78, 0.18]], 0.85),
+    height: THICK,
+  },
   cube: { kind: 'box', hx: 0.38, hy: 0.38, hz: 0.38 },
 };
 
@@ -49,10 +111,18 @@ export function prismPoints(sides: number, radius: number, height: number): numb
   return pts;
 }
 
+/** 3D corner points of a polygon prism spanning y = bottom..top. */
+export function polygonPoints(points: [number, number][], bottom: number, top: number): number[] {
+  const pts: number[] = [];
+  for (const y of [bottom, top]) for (const [x, z] of points) pts.push(x, y, z);
+  return pts;
+}
+
 /** Corner points of a stone in its own frame (the cylinder's rim sampled). */
 export function hullPoints(shape: Shape): number[] {
   const g = GEOMETRY[shape];
   if (g.kind === 'prism') return prismPoints(g.sides, g.radius, g.height);
+  if (g.kind === 'polygon') return polygonPoints(g.points, -g.height / 2, g.height / 2);
   if (g.kind === 'cylinder') return prismPoints(16, g.radius, g.height);
   const pts: number[] = [];
   for (const x of [-g.hx, g.hx]) for (const y of [-g.hy, g.hy]) for (const z of [-g.hz, g.hz]) pts.push(x, y, z);
@@ -81,12 +151,65 @@ export function lowestY(shape: Shape, pose: Pose): number {
 export function boundingRadius(shape: Shape): number {
   const g = GEOMETRY[shape];
   if (g.kind === 'box') return Math.hypot(g.hx, g.hy, g.hz);
+  if (g.kind === 'polygon') return Math.hypot(Math.max(...g.points.map(([x, z]) => Math.hypot(x, z))), g.height / 2);
   return Math.hypot(g.radius, g.height / 2);
 }
 
 /** Base (pedestal) and table. The base top is y = 0. */
-export const BASE_RADIUS = 1.7;
 export const BASE_HEIGHT = 0.6;
+
+/** Base rocks to build on. Smaller tops are harder; the lobby sorts them by area. */
+export const BASES = {
+  boulder: { name: 'Boulder', outline: { kind: 'circle', radius: 1.7 } },
+  millstone: { name: 'Millstone', outline: { kind: 'circle', radius: 1.25 } },
+  flagstone: {
+    name: 'Flagstone',
+    outline: { kind: 'polygon', points: centred([[-1.0, -0.9], [1.05, -1.0], [0.95, 0.95], [-1.1, 0.85]]) },
+  },
+  riverStone: {
+    name: 'River stone',
+    outline: { kind: 'polygon', points: centred(ellipse(1.35, 0.8, [0, 30, 65, 100, 140, 175, 205, 245, 285, 320], 0.25)) },
+  },
+  stump: { name: 'Stump', outline: { kind: 'circle', radius: 0.95 } },
+  ridge: {
+    name: 'Ridge',
+    outline: { kind: 'polygon', points: centred([[-1.45, -0.42], [1.4, -0.5], [1.5, 0.4], [-1.35, 0.48]]) },
+  },
+  pebble: {
+    name: 'Pebble',
+    outline: { kind: 'polygon', points: centred(ellipse(0.85, 0.62, [0, 50, 95, 150, 200, 240, 290, 330], 0.2)) },
+  },
+  needle: { name: 'Needle', outline: { kind: 'circle', radius: 0.62 } },
+} satisfies Record<string, { name: string; outline: Outline }>;
+
+export type BaseId = keyof typeof BASES;
+export const DEFAULT_BASE: BaseId = 'stump';
+
+export function outlineArea(o: Outline): number {
+  return o.kind === 'circle' ? Math.PI * o.radius ** 2 : polygonArea(o.points);
+}
+
+/** Furthest the outline reaches from the centre. */
+export function outlineRadius(o: Outline): number {
+  return o.kind === 'circle' ? o.radius : Math.max(...o.points.map(([x, z]) => Math.hypot(x, z)));
+}
+
+export function baseOutline(id: BaseId): Outline {
+  return BASES[id].outline as Outline;
+}
+
+/** Base ids from easiest (biggest top) to hardest. */
+export const BASE_IDS = (Object.keys(BASES) as BaseId[]).sort((a, b) => outlineArea(baseOutline(b)) - outlineArea(baseOutline(a)));
+
+export function isBaseId(id: unknown): id is BaseId {
+  return typeof id === 'string' && Object.hasOwn(BASES, id);
+}
+
+/** Rough difficulty label from the top area. */
+export function baseDifficulty(id: BaseId): string {
+  const a = outlineArea(baseOutline(id));
+  return a > 6 ? 'easy' : a > 3.5 ? 'medium' : a > 2 ? 'hard' : 'very hard';
+}
 /** Stones whose centre drops below this have fallen off the tower. */
 export const FALL_Y = -0.05;
 /** Stones whose lowest point gets this close to the table have fallen too (e.g. leaning on the base). */

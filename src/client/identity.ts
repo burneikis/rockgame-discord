@@ -15,8 +15,8 @@ export interface Identity {
   accessToken?: string;
 }
 
-const PID_KEY = 'gravitas.pid';
-const NAME_KEY = 'gravitas.name';
+const PID_KEY = 'rockgame.pid';
+const NAME_KEY = 'rockgame.name';
 
 /** Discord launches activities with frame_id/instance_id query params. */
 export function isInDiscord(): boolean {

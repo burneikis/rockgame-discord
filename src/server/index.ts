@@ -5,7 +5,7 @@ import { WebSocketServer, WebSocket } from 'ws';
 import { Game } from '../shared/engine';
 import { botAction } from '../shared/bot';
 import { DT, initPhysics } from '../shared/physics';
-import { SHAPES, type Pose } from '../shared/stones';
+import { DEFAULT_BASE, SHAPES, isBaseId, type BaseId, type Pose } from '../shared/stones';
 import { MAX_PLAYERS, ROLL_MS, TURN_TIMER_CHOICES, type BodyFrame, type ClientMessage, type GameView, type RoomView, type ServerMessage } from '../shared/protocol';
 
 try {
@@ -62,6 +62,7 @@ class Room {
   members: Member[] = [];
   hostId: string | null = null;
   sets = 1;
+  base: BaseId = DEFAULT_BASE;
   turnSeconds = 0;
   game: Game | null = null;
   sockets = new Map<WebSocket, string>();
@@ -124,6 +125,7 @@ class Room {
       id: this.id,
       hostId: this.hostId,
       sets: this.sets,
+      base: this.base,
       turnSeconds: this.turnSeconds,
       members: this.members.map((m) => ({ ...m, connected: m.isBot || this.isConnected(m.id) })),
     };
@@ -373,6 +375,7 @@ function handle(ws: WebSocket, msg: ClientMessage, ctx: { room: Room | null }): 
     case 'setOptions': {
       if (!isHost || !inLobby) return 'Only the host can change options';
       if (msg.sets === 1 || msg.sets === 2) room.sets = msg.sets;
+      if (isBaseId(msg.base)) room.base = msg.base;
       if (typeof msg.turnSeconds === 'number' && TURN_TIMER_CHOICES.includes(msg.turnSeconds)) room.turnSeconds = msg.turnSeconds;
       return null;
     }
@@ -382,7 +385,7 @@ function handle(ws: WebSocket, msg: ClientMessage, ctx: { room: Room | null }): 
       const seated = room.members.slice(0, MAX_PLAYERS);
       if (seated.length < 2) return 'Need at least 2 players (add a bot?)';
       if (seated.some((m) => !m.isBot && !room.isConnected(m.id))) return 'Someone is reconnecting; wait a moment';
-      room.setGame(new Game(seated, { sets: room.sets }));
+      room.setGame(new Game(seated, { sets: room.sets, base: room.base }));
       return null;
     }
     case 'act': {
@@ -568,7 +571,7 @@ setInterval(() => {
 
 await initPhysics();
 server.listen(PORT, () => {
-  console.log(`Gravitas server on http://localhost:${PORT}${DEV ? ' (dev mode: roll rigging enabled)' : ''}`);
+  console.log(`Rock Game server on http://localhost:${PORT}${DEV ? ' (dev mode: roll rigging enabled)' : ''}`);
   if (!DISCORD_CLIENT_ID || !DISCORD_CLIENT_SECRET) console.log('Discord credentials not set in .env (browser play still works)');
   else console.log(ALLOW_GUESTS ? 'Guest (non-Discord) players allowed' : 'Discord login required (set ALLOW_GUESTS=1 to allow browser guests)');
 });

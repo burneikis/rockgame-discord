@@ -2,7 +2,26 @@ import { beforeAll, describe, expect, it } from 'vitest';
 import { Game } from './engine';
 import { botAction } from './bot';
 import { initPhysics } from './physics';
-import { BASE_HEIGHT, BASE_RADIUS, allowedStones, canMake, lowestY, placementRotation, quatAxis, type Stone } from './stones';
+import {
+  BASES,
+  BASE_HEIGHT,
+  BASE_IDS,
+  GEOMETRY,
+  allowedStones,
+  baseOutline,
+  canMake,
+  isConvex,
+  lowestY,
+  outlineArea,
+  placementRotation,
+  quatAxis,
+  type BaseId,
+  type Stone,
+} from './stones';
+
+/** Tests run on the Millstone: a round base of radius 1.25. */
+const OPTS = { sets: 1, base: 'millstone' as BaseId };
+const BASE_RADIUS = 1.25;
 
 beforeAll(() => initPhysics());
 
@@ -40,13 +59,45 @@ describe('geometry', () => {
   it('finds the lowest point of a rotated stone', () => {
     expect(lowestY('cube', { p: [0, 0.38, 0], q: [0, 0, 0, 1] })).toBeCloseTo(0);
     expect(lowestY('cube', { p: [0, 1, 0], q: quatAxis(0, 0, 1, Math.PI / 4) })).toBeCloseTo(1 - 0.38 * Math.SQRT2);
-    expect(lowestY('shaft', { p: [0, 1, 0], q: quatAxis(0, 0, 1, Math.PI / 2) })).toBeCloseTo(-0.1);
+    expect(lowestY('shaft', { p: [0, 1, 0], q: quatAxis(0, 0, 1, Math.PI / 2) })).toBeCloseTo(0.25);
+  });
+});
+
+describe('stones and bases', () => {
+  it('has a lopsided but convex pentagon', () => {
+    const g = GEOMETRY.pentagon;
+    if (g.kind !== 'polygon') throw new Error('pentagon should be a polygon');
+    expect(g.points).toHaveLength(5);
+    expect(isConvex(g.points)).toBe(true);
+    const sides = g.points.map((p, i) => {
+      const q = g.points[(i + 1) % 5];
+      return Math.hypot(p[0] - q[0], p[1] - q[1]);
+    });
+    expect(Math.max(...sides) / Math.min(...sides)).toBeGreaterThan(1.5);
+  });
+
+  it('has convex bases, sorted from the biggest top to the smallest', () => {
+    for (const id of BASE_IDS) {
+      const o = baseOutline(id);
+      if (o.kind === 'polygon') expect(isConvex(o.points), id).toBe(true);
+    }
+    const areas = BASE_IDS.map((id) => outlineArea(baseOutline(id)));
+    expect([...areas].sort((a, b) => b - a)).toEqual(areas);
+    expect(BASE_IDS).toHaveLength(Object.keys(BASES).length);
+  });
+
+  it('only lets you place on the base you picked', () => {
+    const g = new Game(members(2), { sets: 1, base: 'ridge' }, seeded(9));
+    // The ridge is long in x and narrow in z.
+    expect(g.sim.dropPose('cube', 1.2, 0, [0, 0, 0, 1])).not.toBeNull();
+    expect(g.sim.dropPose('cube', 0, 1.2, [0, 0, 0, 1])).toBeNull();
+    g.dispose();
   });
 });
 
 describe('game flow', () => {
   it('places a stone on the base and passes the turn when the roll is used up', () => {
-    const g = new Game(members(2), { sets: 1 }, seeded(1));
+    const g = new Game(members(2), OPTS, seeded(1));
     const first = g.current.id;
     g.rigRoll(6);
     expect(g.act(first, { kind: 'roll' })).toBeNull();
@@ -62,7 +113,7 @@ describe('game flow', () => {
   });
 
   it('rejects stones that do not fit the roll and placements off the base', () => {
-    const g = new Game(members(2), { sets: 1 }, seeded(2));
+    const g = new Game(members(2), OPTS, seeded(2));
     const pid = g.current.id;
     g.rigRoll(2);
     g.act(pid, { kind: 'roll' });
@@ -74,7 +125,7 @@ describe('game flow', () => {
   });
 
   it('a stone dropped over the edge falls and goes back to the player, ending the turn', () => {
-    const g = new Game(members(2), { sets: 1 }, seeded(3));
+    const g = new Game(members(2), OPTS, seeded(3));
     const pid = g.current.id;
     g.rigRoll(1);
     g.act(pid, { kind: 'roll' });
@@ -88,7 +139,7 @@ describe('game flow', () => {
   });
 
   it('a player who cannot make the roll takes a stone from the tower', () => {
-    const g = new Game(members(2), { sets: 1 }, seeded(4));
+    const g = new Game(members(2), OPTS, seeded(4));
     const a = g.current;
     g.rigRoll(6);
     g.act(a.id, { kind: 'roll' });
@@ -108,22 +159,22 @@ describe('game flow', () => {
   });
 
   it('counts a stone leaning against the base from the table as fallen', () => {
-    const g = new Game(members(2), { sets: 1 }, seeded(6));
+    const g = new Game(members(2), OPTS, seeded(6));
     const shaft = { id: 99, shape: 'shaft' as const };
     g.tower.set(shaft.id, shaft);
     // Standing on its end on the table, right next to the base.
-    g.sim.add(shaft.id, 'shaft', { p: [BASE_RADIUS + 0.4, -BASE_HEIGHT + 1.1, 0], q: quatAxis(0, 0, 1, Math.PI / 2) });
+    g.sim.add(shaft.id, 'shaft', { p: [BASE_RADIUS + 0.4, -BASE_HEIGHT + 0.75, 0], q: quatAxis(0, 0, 1, Math.PI / 2) });
     expect(g.sim.isFallen(shaft.id)).toBe(true);
   });
 
   it('can stand a shaft on its end', () => {
-    const g = new Game(members(2), { sets: 1 }, seeded(7));
+    const g = new Game(members(2), OPTS, seeded(7));
     const pose = g.sim.dropPose('shaft', 0, 0, placementRotation(0, 2))!;
-    expect(pose.p[1]).toBeCloseTo(1.1, 1);
+    expect(pose.p[1]).toBeCloseTo(0.75, 1);
   });
 
   it('wins when the last stone stays up', () => {
-    const g = new Game(members(2), { sets: 1 }, seeded(5));
+    const g = new Game(members(2), OPTS, seeded(5));
     const a = g.current;
     a.supply = a.supply.filter((s) => s.shape === 'square');
     g.rigRoll(4);
@@ -136,10 +187,23 @@ describe('game flow', () => {
 });
 
 describe('bots', () => {
+  it('play on every base without breaking the rules', { timeout: 120_000 }, () => {
+    for (const base of BASE_IDS) {
+      const rand = seeded(base.length * 31);
+      const g = new Game(members(2), { sets: 1, base }, rand);
+      for (let moves = 0; g.step !== 'over' && moves < 60; moves++) {
+        expect(g.act(g.current.id, botAction(g, rand))).toBeNull();
+        g.settle();
+      }
+      expect(g.players.reduce((n, p) => n + p.supply.length, 0) + g.tower.size).toBe(12);
+      g.dispose();
+    }
+  });
+
   it('play full games to a finish', { timeout: 120_000 }, () => {
     for (let seed = 1; seed <= 3; seed++) {
       const rand = seeded(seed * 97);
-      const g = new Game(members(3), { sets: 1 }, rand);
+      const g = new Game(members(3), OPTS, rand);
       let moves = 0;
       while (g.step !== 'over' && moves < 400) {
         const err = g.act(g.current.id, botAction(g, rand));

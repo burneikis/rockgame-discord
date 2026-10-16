@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 import { Sim, initPhysics } from '../shared/physics';
-import { BASE_HEIGHT, BASE_RADIUS, FALL_Y, GEOMETRY, SHAPES, boundingRadius, placementRotation, type Pose, type Shape } from '../shared/stones';
+import { BASE_HEIGHT, DEFAULT_BASE, FALL_Y, GEOMETRY, SHAPES, baseOutline, boundingRadius, outlineRadius, placementRotation, type BaseId, type Pose, type Shape } from '../shared/stones';
 import type { BodyFrame, TowerStone } from '../shared/protocol';
 
 /**
@@ -44,12 +44,33 @@ export function geometryFor(shape: Shape): THREE.BufferGeometry {
   const g = GEOMETRY[shape];
   if (g.kind === 'box') geo = new RoundedBoxGeometry(g.hx * 2, g.hy * 2, g.hz * 2, 2, 0.025);
   else if (g.kind === 'cylinder') geo = new THREE.CylinderGeometry(g.radius, g.radius, g.height, 48);
+  else if (g.kind === 'polygon') geo = polygonGeometry(g.points, -g.height / 2, g.height / 2);
   else {
     // Same vertex layout as the physics convex hull; split for flat faces.
     geo = new THREE.CylinderGeometry(g.radius, g.radius, g.height, g.sides).toNonIndexed();
     geo.computeVertexNormals();
   }
   geometryCache.set(shape, geo);
+  return geo;
+}
+
+/** Flat-shaded prism of an x/z outline, spanning y = bottom..top. */
+function polygonGeometry(points: [number, number][], bottom: number, top: number): THREE.BufferGeometry {
+  // Extrude along +z, then turn so the extrusion runs up y. rotateX(-90deg) maps
+  // (x, y, z) to (x, z, -y), so outline point (x, z) is drawn at shape (x, -z).
+  const shape = new THREE.Shape(points.map(([x, z]) => new THREE.Vector2(x, -z)));
+  const geo = new THREE.ExtrudeGeometry(shape, { depth: top - bottom, bevelEnabled: false });
+  geo.rotateX(-Math.PI / 2);
+  geo.translate(0, bottom, 0);
+  geo.computeVertexNormals();
+  return geo;
+}
+
+function baseGeometry(id: BaseId): THREE.BufferGeometry {
+  const o = baseOutline(id);
+  if (o.kind === 'polygon') return polygonGeometry(o.points, -BASE_HEIGHT, 0);
+  const geo = new THREE.CylinderGeometry(o.radius, o.radius * 1.04, BASE_HEIGHT, 96);
+  geo.translate(0, -BASE_HEIGHT / 2, 0);
   return geo;
 }
 
@@ -134,6 +155,7 @@ export class Stage {
   private bodies = new Map<number, Body>();
   private stoneMaterial: THREE.MeshStandardMaterial;
   private base: THREE.Mesh;
+  private baseId: BaseId = DEFAULT_BASE;
   private raycaster = new THREE.Raycaster();
   private frameTick = -1;
   private frameAt = 0;
@@ -214,10 +236,9 @@ export class Stage {
     // Base: a dark granite pedestal
     const granite = noiseTexture(256, [62, 62, 66], 36, 8, 3);
     this.base = new THREE.Mesh(
-      new THREE.CylinderGeometry(BASE_RADIUS, BASE_RADIUS * 1.04, BASE_HEIGHT, 96),
+      baseGeometry(this.baseId),
       new THREE.MeshStandardMaterial({ map: granite, roughness: 0.55, metalness: 0.05 }),
     );
-    this.base.position.y = -BASE_HEIGHT / 2;
     this.base.castShadow = this.base.receiveShadow = true;
     this.scene.add(this.base);
 
@@ -271,11 +292,20 @@ export class Stage {
 
   // ------------------------------------------------------------ bodies
 
+  setBase(id: BaseId) {
+    if (id === this.baseId) return;
+    this.baseId = id;
+    this.base.geometry.dispose();
+    this.base.geometry = baseGeometry(id);
+    this.simKey = '';
+    if (this.physicsReady && this.pendingTower) this.rebuildSim(this.pendingTower);
+  }
+
   /** Full tower from a state message. */
   setTower(tick: number, stones: TowerStone[]) {
     this.applyPoses(tick, stones);
+    this.pendingTower = stones;
     if (this.physicsReady) this.rebuildSim(stones);
-    else this.pendingTower = stones;
   }
 
   /** Streamed snapshot while the tower moves. */
@@ -327,7 +357,7 @@ export class Stage {
     if (key === this.simKey && this.sim) return;
     this.simKey = key;
     this.sim?.free();
-    this.sim = Sim.create();
+    this.sim = Sim.create(this.baseId);
     for (const s of stones) this.sim.add(s.id, s.shape, s.pose, true);
     this.recomputeGhost();
   }
@@ -453,7 +483,7 @@ export class Stage {
       const plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
       point = this.raycaster.ray.intersectPlane(plane, new THREE.Vector3());
     }
-    this.aimXZ = point && Math.hypot(point.x, point.z) < BASE_RADIUS + 3 ? [point.x, point.z] : null;
+    this.aimXZ = point && Math.hypot(point.x, point.z) < outlineRadius(baseOutline(this.baseId)) + 3 ? [point.x, point.z] : null;
     this.recomputeGhost();
   }
 

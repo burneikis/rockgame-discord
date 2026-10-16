@@ -1,21 +1,21 @@
-# Gravitas Discord Activity: app + Cloudflare tunnel.
+# Rock Game Discord Activity: app + Cloudflare tunnel.
 # The app publishes no host ports; Discord reaches it only through the tunnel.
 #
 #   cp .env.example .env   # fill in values
 #   docker compose up -d --build
 #
 # Uses a named Cloudflare tunnel (TUNNEL_TOKEN in .env) so the hostname is fixed:
-#   cloudflared tunnel create gravitas
-#   cloudflared tunnel route dns gravitas gravitas.example.com
-#   cloudflared tunnel token gravitas   # -> TUNNEL_TOKEN
+#   cloudflared tunnel create rockgame
+#   cloudflared tunnel route dns rockgame rockgame.example.com
+#   cloudflared tunnel token rockgame   # -> TUNNEL_TOKEN
 services:
-  gravitas:
+  rockgame:
     build:
       context: .
       args:
         VITE_DISCORD_CLIENT_ID: ${VITE_DISCORD_CLIENT_ID:?set VITE_DISCORD_CLIENT_ID in .env}
-    image: gravitas-discord
-    container_name: gravitas
+    image: rockgame-discord
+    container_name: rockgame
     restart: unless-stopped
     environment:
       VITE_DISCORD_CLIENT_ID: ${VITE_DISCORD_CLIENT_ID}
@@ -31,21 +31,21 @@ services:
     mem_limit: 384m
     cpus: 1.0
     pids_limit: 128
-    networks: [gravitas]
+    networks: [rockgame]
 
   cloudflared:
     image: cloudflare/cloudflared:latest
-    container_name: gravitas-tunnel
+    container_name: rockgame-tunnel
     restart: unless-stopped
-    command: tunnel --no-autoupdate run --url http://gravitas:3001
+    command: tunnel --no-autoupdate run --url http://rockgame:3001
     environment:
       TUNNEL_TOKEN: ${TUNNEL_TOKEN:?set TUNNEL_TOKEN in .env}
-    depends_on: [gravitas]
+    depends_on: [rockgame]
     read_only: true
     cap_drop: [ALL]
     security_opt: [no-new-privileges:true]
     mem_limit: 128m
-    networks: [gravitas]
+    networks: [rockgame]
 
 networks:
-  gravitas:
+  rockgame:

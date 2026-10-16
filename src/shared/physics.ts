@@ -1,5 +1,5 @@
 import RAPIER from '@dimforge/rapier3d-compat';
-import { BASE_HEIGHT, BASE_RADIUS, FALL_Y, GEOMETRY, TABLE_TOUCH, boundingRadius, lowestY, prismPoints, type Pose, type Shape } from './stones';
+import { BASE_HEIGHT, DEFAULT_BASE, FALL_Y, GEOMETRY, TABLE_TOUCH, baseOutline, boundingRadius, lowestY, polygonPoints, prismPoints, type BaseId, type Pose, type Shape } from './stones';
 
 /**
  * Thin wrapper around a Rapier world holding the base, the table and the
@@ -28,6 +28,7 @@ export function colliderDesc(shape: Shape): RAPIER.ColliderDesc {
   let desc: RAPIER.ColliderDesc | null;
   if (g.kind === 'box') desc = RAPIER.ColliderDesc.cuboid(g.hx, g.hy, g.hz);
   else if (g.kind === 'cylinder') desc = RAPIER.ColliderDesc.cylinder(g.height / 2, g.radius);
+  else if (g.kind === 'polygon') desc = RAPIER.ColliderDesc.convexHull(new Float32Array(polygonPoints(g.points, -g.height / 2, g.height / 2)));
   else desc = RAPIER.ColliderDesc.convexHull(new Float32Array(prismPoints(g.sides, g.radius, g.height)));
   if (!desc) throw new Error(`could not build collider for ${shape}`);
   return desc.setFriction(FRICTION).setRestitution(RESTITUTION).setDensity(DENSITY);
@@ -46,12 +47,18 @@ export class Sim {
     this.table = table;
   }
 
-  static create(): Sim {
+  static create(base: BaseId = DEFAULT_BASE): Sim {
     const world = new RAPIER.World(GRAVITY);
     world.timestep = DT;
     world.numSolverIterations = 8;
     // Parentless colliders are fixed in place at their own translation.
-    world.createCollider(RAPIER.ColliderDesc.cylinder(BASE_HEIGHT / 2, BASE_RADIUS).setTranslation(0, -BASE_HEIGHT / 2, 0).setFriction(FRICTION));
+    const outline = baseOutline(base);
+    const baseDesc =
+      outline.kind === 'circle'
+        ? RAPIER.ColliderDesc.cylinder(BASE_HEIGHT / 2, outline.radius).setTranslation(0, -BASE_HEIGHT / 2, 0)
+        : RAPIER.ColliderDesc.convexHull(new Float32Array(polygonPoints(outline.points, -BASE_HEIGHT, 0)));
+    if (!baseDesc) throw new Error(`could not build base ${base}`);
+    world.createCollider(baseDesc.setFriction(FRICTION));
     const table = world.createCollider(RAPIER.ColliderDesc.cuboid(40, 0.5, 40).setTranslation(0, -BASE_HEIGHT - 0.5, 0).setFriction(FRICTION));
     return new Sim(world, new Map(), table.handle);
   }

@@ -1,5 +1,5 @@
 import type { Action, GameEvent, GameOptions, LogEntry, Step } from './engine';
-import type { Pose, Shape, Stone } from './stones';
+import type { BaseId, Pose, Shape, Stone } from './stones';
 
 export interface MemberView { id: string; name: string; isBot: boolean; connected: boolean }
 
@@ -37,6 +37,7 @@ export interface RoomView {
   id: string;
   hostId: string | null;
   sets: number;
+  base: BaseId;
   /** Turn timer in seconds, 0 = off. */
   turnSeconds: number;
   members: MemberView[];
@@ -62,7 +63,7 @@ export type ClientMessage =
   /** Take a seat again (e.g. after being removed from the lobby). */
   | { type: 'sit' }
   | { type: 'ping' }
-  | { type: 'setOptions'; sets?: number; turnSeconds?: number }
+  | { type: 'setOptions'; sets?: number; base?: BaseId; turnSeconds?: number }
   | { type: 'start' }
   | { type: 'act'; action: Action }
   | { type: 'aim'; shape: Shape | null; pose: Pose | null }

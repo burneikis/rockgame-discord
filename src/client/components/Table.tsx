@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { ClientMessage, GameView, PlayerView } from '../../shared/protocol';
 import { ROLL_MS } from '../../shared/protocol';
-import { SHAPE_NAMES, VALUE, type Pose, type Stone } from '../../shared/stones';
+import { BASES, SHAPE_NAMES, VALUE, type Pose, type Stone } from '../../shared/stones';
 import { Stage, type StageMode } from '../stage';
 import { play, setMuted, useMuted } from '../sound';
 import type { StateMessage, Subscribe } from '../useConnection';
@@ -44,6 +44,7 @@ export function Table({ state, game, send, subscribe }: { state: StateMessage; g
     };
   }, []);
 
+  useEffect(() => stage.current?.setBase(game.options.base), [game.options.base]);
   useEffect(() => stage.current?.setTower(game.tick, game.tower), [game.tick, game.tower]);
 
   // Body frames and other players' aims bypass React.
@@ -211,8 +212,9 @@ export function Table({ state, game, send, subscribe }: { state: StateMessage; g
   return (
     <div className="table">
       <div className="topbar">
-        <span className="logo small-logo">GRAVITAS</span>
+        <span className="logo small-logo">ROCK GAME</span>
         <span className="chip">{game.options.sets === 2 ? 'Tournament (12 stones)' : '6 stones each'}</span>
+        <span className="chip">{BASES[game.options.base].name}</span>
         {state.room.turnSeconds > 0 && <span className="chip">{state.room.turnSeconds}s turns</span>}
         <span className="spacer" />
         {state.devMode && (

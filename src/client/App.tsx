@@ -61,7 +61,7 @@ function NameScreen({ onSubmit }: { onSubmit: (name: string) => void }) {
         if (value.trim()) onSubmit(value.trim());
       }}
     >
-      <h1 className="logo">GRAVITAS</h1>
+      <h1 className="logo">ROCK GAME</h1>
       <input autoFocus placeholder="Your name" maxLength={24} value={value} onChange={(e) => setValue(e.target.value)} />
       <button className="btn primary" disabled={!value.trim()}>
         Join

@@ -1,4 +1,4 @@
-# Gravitas Rules
+# Rock Game Rules
 
 > "Art you can play with." A stone stacking game handmade in Vermont.
 

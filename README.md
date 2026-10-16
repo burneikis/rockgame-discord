@@ -1,9 +1,6 @@
-# Gravitas - Discord Activity
+# Rock Game - Discord Activity
 
-Unofficial 3D fan implementation of *Gravitas*, the stone stacking game
-(Art of Play), as a Discord Activity. Rules are in [RULES.md](RULES.md).
-
-> Not affiliated with or endorsed by Art of Play. Buy the real stones, they're lovely.
+A 3D stone stacking game as a Discord Activity. Rules are in [RULES.md](RULES.md).
 
 ## Quick start
 
@@ -68,6 +65,27 @@ src/client/components/  React UI (lobby, table HUD)
   whatever falls as a result is yours.
 - If you can't make the roll and the tower is empty, the turn passes.
 - Options: one set of stones each (6) or the tournament variant (12).
+- The pentagon is deliberately lopsided (one short side, uneven corners): it's
+  the strange piece. The shaft is a short bar (1.5 long).
+
+### Base rocks
+
+Picked in the lobby, listed from easiest to hardest by the area of the top
+(`BASES` in `src/shared/stones.ts`; the order is computed, so new bases slot
+in automatically). The lobby shows a top view with a square stone for scale.
+
+| Base | Shape | Top area |
+|---|---|---|
+| Boulder | round, r 1.7 | 9.1 |
+| Millstone | round, r 1.25 | 4.9 |
+| Flagstone | irregular quad | 3.8 |
+| River stone | lopsided oval | 3.2 |
+| Stump (default) | round, r 0.95 | 2.8 |
+| Ridge | long narrow bar | 2.6 |
+| Pebble | small lopsided oval | 1.5 |
+| Needle | round, r 0.62 | 1.2 |
+
+Bases must be convex (they are Rapier convex hulls); a test checks this.
 
 ### Tests
 

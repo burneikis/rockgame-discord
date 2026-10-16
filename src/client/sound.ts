@@ -6,7 +6,7 @@ import { useSyncExternalStore } from 'react';
  */
 export type Sfx = 'roll' | 'place' | 'pickup' | 'fall' | 'stuck' | 'turn' | 'win' | 'click';
 
-const MUTE_KEY = 'gravitas-muted';
+const MUTE_KEY = 'rockgame-muted';
 let ctx: AudioContext | null = null;
 let master: GainNode | null = null;
 let muted = readMuted();

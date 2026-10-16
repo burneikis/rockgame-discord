@@ -1,8 +1,10 @@
 import { MAX_PLAYERS, TURN_TIMER_CHOICES, type ClientMessage } from '../../shared/protocol';
-import { SHAPES, SHAPE_NAMES, VALUE } from '../../shared/stones';
+import { BASES, BASE_IDS, SHAPES, SHAPE_NAMES, VALUE, baseDifficulty, baseOutline, outlineArea, type BaseId } from '../../shared/stones';
 import type { StateMessage } from '../useConnection';
 import { isInDiscord } from '../identity';
-import { StoneIcon } from './StoneIcon';
+import { BaseIcon, StoneIcon, maxBaseRadius } from './StoneIcon';
+
+const MAX_BASE_RADIUS = maxBaseRadius(BASE_IDS);
 
 export function Lobby({ state, send }: { state: StateMessage; send: (m: ClientMessage) => void }) {
   const { room, you } = state;
@@ -12,7 +14,7 @@ export function Lobby({ state, send }: { state: StateMessage; send: (m: ClientMe
 
   return (
     <div className="lobby">
-      <h1 className="logo">GRAVITAS</h1>
+      <h1 className="logo">ROCK GAME</h1>
       <div className="subtitle">a stone stacking game</div>
       <div className="legend">
         {SHAPES.map((s) => (
@@ -52,6 +54,18 @@ export function Lobby({ state, send }: { state: StateMessage; send: (m: ClientMe
               <option value={1}>One of each shape (6 each)</option>
               <option value={2}>Tournament: two of each (12 each)</option>
             </select>
+          </label>
+          <label>
+            Base rock
+            <select value={room.base} disabled={!isHost} onChange={(e) => send({ type: 'setOptions', base: e.target.value as BaseId })}>
+              {BASE_IDS.map((id) => (
+                <option key={id} value={id}>
+                  {BASES[id].name} ({baseDifficulty(id)}, area {outlineArea(baseOutline(id)).toFixed(1)})
+                </option>
+              ))}
+            </select>
+            <BaseIcon id={room.base} size={64} maxRadius={MAX_BASE_RADIUS} />
+            <span className="muted small">(dashed: a square stone)</span>
           </label>
           <label>
             Turn timer
