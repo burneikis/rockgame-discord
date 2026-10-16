@@ -1,7 +1,7 @@
 {
   "name": "rockgame-discord",
   "version": "0.1.0",
-  "description": "Rock Game: a stone stacking game as a 3D Discord Activity",
+  "description": "Unofficial 3D fan implementation of Gravitas for Discord Activity",
   "scripts": {
     "dev": "concurrently -k -n server,client -c blue,green \"npm:dev:server\" \"npm:dev:client\"",
     "dev:server": "DEV=1 tsx watch src/server/index.ts",

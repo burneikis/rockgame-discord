@@ -1,6 +1,8 @@
 # Rock Game - Discord Activity
 
-A 3D stone stacking game as a Discord Activity. Rules are in [RULES.md](RULES.md).
+Unofficial 3D fan implementation of *Gravitas* for Discord Activity. Not
+affiliated with or endorsed by the makers of Gravitas. Rules are in
+[RULES.md](RULES.md).
 
 ## Quick start
 
@@ -99,7 +101,8 @@ npm run typecheck
 
 ## Running it in Discord
 
-Same setup as the Flip 7 activity: the server serves the client, `/ws` and
+Same setup as my [Flip 7 Discord Activity](https://github.com/burneikis/flip7-discord):
+the server serves the client, `/ws` and
 `/api/token` on one port, so a single URL mapping is enough.
 
 1. https://discord.com/developers/applications -> **New Application**.
