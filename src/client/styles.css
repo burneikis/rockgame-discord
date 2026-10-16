@@ -198,9 +198,16 @@ input, select {
   background: #0005; font-size: 13px; display: flex; flex-direction: column; gap: 4px;
 }
 
-.overlay { position: fixed; inset: 0; background: #0008; display: flex; align-items: center; justify-content: center; z-index: 15; }
-.summary { display: flex; flex-direction: column; align-items: center; gap: 12px; min-width: 300px; max-width: 92vw; }
-.summary .logo { font-size: 40px; letter-spacing: 2px; text-align: center; }
+/* Results dock beside the tower (no backdrop) so the final tower stays visible for screenshots. */
+.results-dock {
+  position: absolute; top: 10px; right: 10px; z-index: 5;
+  width: min(300px, calc(100% - 20px)); max-height: calc(100% - 20px); overflow: auto;
+  background: #2a231ce6; backdrop-filter: blur(4px);
+}
+.results-show { position: absolute; top: 10px; right: 10px; z-index: 5; }
+.summary { display: flex; flex-direction: column; align-items: center; gap: 10px; }
+.summary .logo { font-size: 30px; letter-spacing: 2px; text-align: center; }
+.summary-hide { align-self: flex-end; margin: -6px -6px -4px 0; }
 .final { list-style: none; padding: 0; margin: 0; width: 100%; }
 .final li { display: flex; justify-content: space-between; gap: 12px; padding: 4px 0; border-bottom: 1px solid var(--line); }
 

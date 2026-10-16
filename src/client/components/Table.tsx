@@ -23,6 +23,7 @@ export function Table({ state, game, send, subscribe }: { state: StateMessage; g
   const name = (id: string) => game.players.find((p) => p.id === id)?.name ?? '?';
 
   const [showLog, setShowLog] = useState(false);
+  const [hideResults, setHideResults] = useState(false);
   const [confirmEnd, setConfirmEnd] = useState(false);
   const [selected, setSelected] = useState<number | null>(null);
   const [ghostValid, setGhostValid] = useState(false);
@@ -226,6 +227,10 @@ export function Table({ state, game, send, subscribe }: { state: StateMessage; g
   const winner = game.winner ? game.players.find((p) => p.id === game.winner) : null;
   const status = statusText(game, turn, you, rolling);
 
+  useEffect(() => {
+    if (!winner) setHideResults(false);
+  }, [winner]);
+
   return (
     <div className="table">
       <div className="topbar">
@@ -290,56 +295,95 @@ export function Table({ state, game, send, subscribe }: { state: StateMessage; g
             </div>
           )}
 
-          <div className="hud">
-            <div className="hud-row">
-              <Die value={game.roll} rolling={rolling} face={face} />
-              <div className="status">
-                <div className="status-main ellipsis">{status}</div>
-                {placing && <div className="muted small">Click the tower to drop. Drag to look around. Q/E rotate, R tip over.</div>}
-                {picking && <div className="muted small">Click a stone to take it. Anything that falls is yours too.</div>}
-                {canRoll && <div className="muted small">Press Space or the button.</div>}
-              </div>
-              {canRoll && (
-                <button className="btn primary big" onClick={roll}>
-                  Roll
+          {winner &&
+            (hideResults ? (
+              <button className="btn tiny results-show" onClick={() => setHideResults(false)}>
+                Show results
+              </button>
+            ) : (
+              <div className="panel summary results-dock">
+                <button className="btn tiny ghost summary-hide" title="Hide to take a clean screenshot" onClick={() => setHideResults(true)}>
+                  Hide
                 </button>
-              )}
-              {placing && (
-                <div className="row place-tools">
-                  <button className="btn" title="Rotate left (Q)" onClick={() => stage.current?.rotate(-1)}>
-                    &#8634;
+                <div className="logo">{winner.id === you ? 'You win!' : `${winner.name} wins!`}</div>
+                <div className="muted">Last stone placed, and nothing fell.</div>
+                <ul className="final">
+                  {[...game.players]
+                    .sort((a, b) => a.supply.length - b.supply.length)
+                    .map((p) => (
+                      <li key={p.id}>
+                        <span className="ellipsis">{p.name}</span>
+                        <span className="muted">{p.supply.length} stone{p.supply.length === 1 ? '' : 's'} left</span>
+                      </li>
+                    ))}
+                </ul>
+                {isHost ? (
+                  <div className="row">
+                    <button className="btn primary" onClick={() => send({ type: 'start' })}>
+                      Play again
+                    </button>
+                    <button className="btn" onClick={() => send({ type: 'endGame' })}>
+                      Back to lobby
+                    </button>
+                  </div>
+                ) : (
+                  <div className="muted">Waiting for the host...</div>
+                )}
+              </div>
+            ))}
+
+          {!winner && (
+            <div className="hud">
+              <div className="hud-row">
+                <Die value={game.roll} rolling={rolling} face={face} />
+                <div className="status">
+                  <div className="status-main ellipsis">{status}</div>
+                  {placing && <div className="muted small">Click the tower to drop. Drag to look around. Q/E rotate, R tip over.</div>}
+                  {picking && <div className="muted small">Click a stone to take it. Anything that falls is yours too.</div>}
+                  {canRoll && <div className="muted small">Press Space or the button.</div>}
+                </div>
+                {canRoll && (
+                  <button className="btn primary big" onClick={roll}>
+                    Roll
                   </button>
-                  <button className="btn" title="Rotate right (E)" onClick={() => stage.current?.rotate(1)}>
-                    &#8635;
-                  </button>
-                  <button className="btn" title="Tip over (R)" onClick={() => stage.current?.tip()}>
-                    Tip
-                  </button>
-                  <button className="btn primary" disabled={!ghostValid} title="Drop (Enter)" onClick={() => stage.current?.drop()}>
-                    Drop
-                  </button>
+                )}
+                {placing && (
+                  <div className="row place-tools">
+                    <button className="btn" title="Rotate left (Q)" onClick={() => stage.current?.rotate(-1)}>
+                      &#8634;
+                    </button>
+                    <button className="btn" title="Rotate right (E)" onClick={() => stage.current?.rotate(1)}>
+                      &#8635;
+                    </button>
+                    <button className="btn" title="Tip over (R)" onClick={() => stage.current?.tip()}>
+                      Tip
+                    </button>
+                    <button className="btn primary" disabled={!ghostValid} title="Drop (Enter)" onClick={() => stage.current?.drop()}>
+                      Drop
+                    </button>
+                  </div>
+                )}
+              </div>
+              {me && (
+                <div className="tray">
+                  {[...me.supply]
+                    .sort((a, b) => VALUE[a.shape] - VALUE[b.shape] || a.id - b.id)
+                    .map((s) => (
+                      <button
+                        key={s.id}
+                        className={`tray-stone${allowed.has(s.id) ? ' allowed' : ''}${chosen?.id === s.id ? ' chosen' : ''}`}
+                        disabled={!allowed.has(s.id)}
+                        title={`${SHAPE_NAMES[s.shape]} (${VALUE[s.shape]})`}
+                        onClick={() => setSelected(s.id)}
+                      >
+                        <StoneIcon shape={s.shape} points={s.points} size={38} showValue />
+                      </button>
+                    ))}
+                  {me.supply.length === 0 && <span className="muted">No stones left</span>}
                 </div>
               )}
             </div>
-            {me && (
-              <div className="tray">
-                {[...me.supply]
-                  .sort((a, b) => VALUE[a.shape] - VALUE[b.shape] || a.id - b.id)
-                  .map((s) => (
-                    <button
-                      key={s.id}
-                      className={`tray-stone${allowed.has(s.id) ? ' allowed' : ''}${chosen?.id === s.id ? ' chosen' : ''}`}
-                      disabled={!allowed.has(s.id)}
-                      title={`${SHAPE_NAMES[s.shape]} (${VALUE[s.shape]})`}
-                      onClick={() => setSelected(s.id)}
-                    >
-                      <StoneIcon shape={s.shape} points={s.points} size={38} showValue />
-                    </button>
-                  ))}
-                {me.supply.length === 0 && <span className="muted">No stones left</span>}
-              </div>
-            )}
-          </div>
+          )}
         </div>
         {showLog && (
           <div className="log">
@@ -350,36 +394,6 @@ export function Table({ state, game, send, subscribe }: { state: StateMessage; g
         )}
       </div>
 
-      {winner && (
-        <div className="overlay">
-          <div className="panel summary">
-            <div className="logo">{winner.id === you ? 'You win!' : `${winner.name} wins!`}</div>
-            <div className="muted">Last stone placed, and nothing fell.</div>
-            <ul className="final">
-              {[...game.players]
-                .sort((a, b) => a.supply.length - b.supply.length)
-                .map((p) => (
-                  <li key={p.id}>
-                    <span className="ellipsis">{p.name}</span>
-                    <span className="muted">{p.supply.length} stone{p.supply.length === 1 ? '' : 's'} left</span>
-                  </li>
-                ))}
-            </ul>
-            {isHost ? (
-              <div className="row">
-                <button className="btn primary" onClick={() => send({ type: 'start' })}>
-                  Play again
-                </button>
-                <button className="btn" onClick={() => send({ type: 'endGame' })}>
-                  Back to lobby
-                </button>
-              </div>
-            ) : (
-              <div className="muted">Waiting for the host...</div>
-            )}
-          </div>
-        </div>
-      )}
     </div>
   );
 }
