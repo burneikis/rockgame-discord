@@ -1,0 +1,40 @@
+{
+  "name": "rockgame-discord",
+  "version": "0.1.0",
+  "description": "Unofficial Gravitas stone stacking game as a 3D Discord Activity",
+  "scripts": {
+    "dev": "concurrently -k -n server,client -c blue,green \"npm:dev:server\" \"npm:dev:client\"",
+    "dev:server": "DEV=1 tsx watch src/server/index.ts",
+    "dev:client": "NODE_ENV=development vite",
+    "build": "vite build",
+    "start": "tsx src/server/index.ts",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "discord": "vite build && tsx src/server/index.ts",
+    "tunnel": "cloudflared tunnel --url http://localhost:3001"
+  },
+  "license": "MIT",
+  "type": "module",
+  "dependencies": {
+    "@dimforge/rapier3d-compat": "^0.21.0",
+    "@discord/embedded-app-sdk": "^2.5.0",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
+    "three": "^0.186.1",
+    "tsx": "^4.23.15",
+    "ws": "^8.22.0"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.5",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@types/three": "^0.186.0",
+    "@types/ws": "^8.18.2",
+    "@vitejs/plugin-react": "^6.1.2",
+    "concurrently": "^10.0.6",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.4",
+    "vitest": "^4.1.12"
+  },
+  "private": true
+}

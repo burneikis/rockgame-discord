@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Gravitas - multi-player test harness</title>
+    <style>
+      body { margin: 0; font-family: system-ui, sans-serif; background: #111; color: #ddd; height: 100vh; display: flex; flex-direction: column; }
+      header { padding: 6px 10px; display: flex; gap: 12px; align-items: center; background: #1d1d1d; font-size: 14px; }
+      header input { width: 90px; }
+      #grid { flex: 1; display: grid; gap: 4px; padding: 4px; min-height: 0; }
+      .cell { display: flex; flex-direction: column; min-height: 0; border: 1px solid #333; }
+      .cell b { font-size: 12px; padding: 2px 6px; background: #222; }
+      iframe { flex: 1; border: 0; width: 100%; background: #000; }
+    </style>
+  </head>
+  <body>
+    <header>
+      <strong>Test harness</strong>
+      <label>Room <input id="room" value="dev" /></label>
+      <label>Players <input id="count" type="number" min="1" max="6" value="2" /></label>
+      <button id="go">Reload</button>
+      <span>Each frame is a separate player. Use "Add bot" in the lobby for more seats.</span>
+    </header>
+    <div id="grid"></div>
+    <script>
+      const NAMES = ['Alice', 'Bob', 'Carol', 'Dave', 'Erin', 'Frank'];
+      const q = new URLSearchParams(location.search);
+      document.getElementById('room').value = q.get('room') || 'dev';
+      document.getElementById('count').value = q.get('players') || '2';
+      function render() {
+        const room = document.getElementById('room').value || 'dev';
+        const n = Math.max(1, Math.min(6, Number(document.getElementById("count").value) || 2));
+        history.replaceState(null, '', `?room=${encodeURIComponent(room)}&players=${n}`);
+        const grid = document.getElementById('grid');
+        const cols = n <= 2 ? n : n <= 4 ? 2 : 3;
+        grid.style.gridTemplateColumns = `repeat(${cols}, 1fr)`;
+        grid.innerHTML = '';
+        for (let i = 0; i < n; i++) {
+          const name = NAMES[i];
+          const cell = document.createElement('div');
+          cell.className = 'cell';
+          cell.innerHTML = `<b>${name}</b>`;
+          const f = document.createElement('iframe');
+          f.src = `/?room=${encodeURIComponent(room)}&pid=dev-${i}&name=${name}`;
+          cell.appendChild(f);
+          grid.appendChild(cell);
+        }
+      }
+      document.getElementById('go').onclick = render;
+      render();
+    </script>
+  </body>
+</html>
