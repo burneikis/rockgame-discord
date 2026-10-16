@@ -64,6 +64,10 @@ export function Table({ state, game, send, subscribe }: { state: StateMessage; g
 
   // ---------------------------------------------------------------- events
   const lastSeq = useRef<number | null>(null);
+  // Callouts that would spoil the roll are held until the die stops.
+  const rollingRef = useRef(false);
+  const afterRoll = useRef<(() => void)[]>([]);
+  const whenRolled = (fn: () => void) => (rollingRef.current ? afterRoll.current.push(fn) : fn());
   useEffect(() => {
     const latest = game.events.at(-1)?.seq ?? 0;
     if (lastSeq.current === null) {
@@ -75,6 +79,7 @@ export function Table({ state, game, send, subscribe }: { state: StateMessage; g
       const who = e.playerId === you ? 'You' : name(e.playerId);
       switch (e.kind) {
         case 'roll':
+          rollingRef.current = true;
           setRolling(true);
           play('roll');
           break;
@@ -88,10 +93,14 @@ export function Table({ state, game, send, subscribe }: { state: StateMessage; g
           play('fall');
           setCallout({ text: `${e.count} stone${e.count === 1 ? '' : 's'} fell! ${who} take${e.playerId === you ? '' : 's'} ${e.count === 1 ? 'it' : 'them'}.`, key: e.seq });
           break;
-        case 'stuck':
-          play('stuck');
-          setCallout({ text: `${who} can't make ${game.roll}: take${e.playerId === you ? '' : 's'} a stone from the tower.`, key: e.seq });
+        case 'stuck': {
+          const text = `${who} can't make ${game.roll}: take${e.playerId === you ? '' : 's'} a stone from the tower.`;
+          whenRolled(() => {
+            play('stuck');
+            setCallout({ text, key: e.seq });
+          });
           break;
+        }
         case 'turn':
           if (e.playerId === you) play('turn');
           break;
@@ -106,7 +115,12 @@ export function Table({ state, game, send, subscribe }: { state: StateMessage; g
   useEffect(() => {
     if (!rolling) return;
     const flick = window.setInterval(() => setFace(1 + Math.floor(Math.random() * 6)), 80);
-    const stop = window.setTimeout(() => setRolling(false), ROLL_MS);
+    const stop = window.setTimeout(() => {
+      rollingRef.current = false;
+      setRolling(false);
+      const queued = afterRoll.current.splice(0);
+      queued.forEach((fn) => fn());
+    }, ROLL_MS);
     return () => {
       window.clearInterval(flick);
       window.clearTimeout(stop);
