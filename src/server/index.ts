@@ -148,7 +148,7 @@ class Room {
         supply: p.supply,
       })),
       tick: g.tick,
-      tower: g.sim.poses().map((s) => ({ id: s.id, shape: s.shape, pose: { p: s.pose.p.map(round4), q: s.pose.q.map(round4) } as Pose })),
+      tower: g.sim.poses().map((s) => ({ id: s.id, shape: s.shape, points: s.points, pose: { p: s.pose.p.map(round4), q: s.pose.q.map(round4) } as Pose })),
       lastPlaced: g.lastPlaced,
       log: g.log.slice(-60),
       events: g.events.slice(-30),
@@ -397,11 +397,12 @@ function handle(ws: WebSocket, msg: ClientMessage, ctx: { room: Room | null }): 
     case 'aim': {
       const g = room.game;
       if (!g || g.step !== 'place' || g.current.id !== pid) return null;
-      if (!msg.shape || !SHAPES.includes(msg.shape)) return null;
+      const stone = g.current.supply.find((s) => s.id === msg.stoneId);
+      if (!stone) return null;
       const pose = msg.pose && Array.isArray(msg.pose.p) && msg.pose.p.length === 3 && Array.isArray(msg.pose.q) && msg.pose.q.length === 4 && [...msg.pose.p, ...msg.pose.q].every((n) => typeof n === 'number' && Number.isFinite(n))
         ? { p: msg.pose.p.map(round4), q: msg.pose.q.map(round4) } as Pose
         : null;
-      room.sendAll({ type: 'aim', aim: { playerId: pid, shape: msg.shape, pose } }, ws);
+      room.sendAll({ type: 'aim', aim: { playerId: pid, stone, pose } }, ws);
       return 'quiet';
     }
     case 'endGame': {

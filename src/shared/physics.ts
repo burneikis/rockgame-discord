@@ -1,5 +1,5 @@
 import RAPIER from '@dimforge/rapier3d-compat';
-import { BASE_HEIGHT, DEFAULT_BASE, FALL_Y, GEOMETRY, TABLE_TOUCH, baseOutline, boundingRadius, lowestY, polygonPoints, prismPoints, type BaseId, type Pose, type Shape } from './stones';
+import { BASE_HEIGHT, DEFAULT_BASE, FALL_Y, TABLE_TOUCH, baseOutline, boundingRadius, geometryOf, lowestY, polygonPoints, prismPoints, type BaseId, type Pose, type Shape, type StoneRef } from './stones';
 
 /**
  * Thin wrapper around a Rapier world holding the base, the table and the
@@ -23,18 +23,18 @@ export const DROP_GAP = 0.02;
 /** How far out (from the centre) a stone may be placed or roll before it is out of play. */
 const OUT_OF_BOUNDS = 25;
 
-export function colliderDesc(shape: Shape): RAPIER.ColliderDesc {
-  const g = GEOMETRY[shape];
+export function colliderDesc(ref: StoneRef): RAPIER.ColliderDesc {
+  const g = geometryOf(ref);
   let desc: RAPIER.ColliderDesc | null;
   if (g.kind === 'box') desc = RAPIER.ColliderDesc.cuboid(g.hx, g.hy, g.hz);
   else if (g.kind === 'cylinder') desc = RAPIER.ColliderDesc.cylinder(g.height / 2, g.radius);
   else if (g.kind === 'polygon') desc = RAPIER.ColliderDesc.convexHull(new Float32Array(polygonPoints(g.points, -g.height / 2, g.height / 2)));
   else desc = RAPIER.ColliderDesc.convexHull(new Float32Array(prismPoints(g.sides, g.radius, g.height)));
-  if (!desc) throw new Error(`could not build collider for ${shape}`);
+  if (!desc) throw new Error(`could not build collider for ${typeof ref === 'string' ? ref : ref.shape}`);
   return desc.setFriction(FRICTION).setRestitution(RESTITUTION).setDensity(DENSITY);
 }
 
-interface Entry { shape: Shape; body: number }
+interface Entry { stone: { shape: Shape; points?: [number, number][] }; body: number }
 
 export class Sim {
   readonly world: RAPIER.World;
@@ -83,7 +83,7 @@ export class Sim {
   }
 
   shapeOf(id: number): Shape | undefined {
-    return this.stones.get(id)?.shape;
+    return this.stones.get(id)?.stone.shape;
   }
 
   private body(id: number): RAPIER.RigidBody | null {
@@ -91,14 +91,15 @@ export class Sim {
     return e ? this.world.getRigidBody(e.body) : null;
   }
 
-  add(id: number, shape: Shape, pose: Pose, fixed = false) {
+  add(id: number, ref: StoneRef, pose: Pose, fixed = false) {
+    const stone = typeof ref === 'string' ? { shape: ref } : { shape: ref.shape, points: ref.points };
     const desc = (fixed ? RAPIER.RigidBodyDesc.fixed() : RAPIER.RigidBodyDesc.dynamic())
       .setTranslation(...pose.p)
       .setRotation({ x: pose.q[0], y: pose.q[1], z: pose.q[2], w: pose.q[3] })
       .setCanSleep(true);
     const body = this.world.createRigidBody(desc);
-    this.world.createCollider(colliderDesc(shape), body);
-    this.stones.set(id, { shape, body: body.handle });
+    this.world.createCollider(colliderDesc(stone), body);
+    this.stones.set(id, { stone, body: body.handle });
   }
 
   remove(id: number) {
@@ -123,9 +124,9 @@ export class Sim {
     return { p: [t.x, t.y, t.z], q: [r.x, r.y, r.z, r.w] };
   }
 
-  poses(): { id: number; shape: Shape; pose: Pose }[] {
-    const out: { id: number; shape: Shape; pose: Pose }[] = [];
-    for (const [id, e] of this.stones) out.push({ id, shape: e.shape, pose: this.pose(id)! });
+  poses(): { id: number; shape: Shape; points?: [number, number][]; pose: Pose }[] {
+    const out: { id: number; shape: Shape; points?: [number, number][]; pose: Pose }[] = [];
+    for (const [id, e] of this.stones) out.push({ id, shape: e.stone.shape, points: e.stone.points, pose: this.pose(id)! });
     return out;
   }
 
@@ -135,7 +136,7 @@ export class Sim {
     return (
       p.p[1] < FALL_Y ||
       Math.hypot(p.p[0], p.p[2]) > OUT_OF_BOUNDS ||
-      lowestY(this.stones.get(id)!.shape, p) < -BASE_HEIGHT + TABLE_TOUCH
+      lowestY(this.stones.get(id)!.stone, p) < -BASE_HEIGHT + TABLE_TOUCH
     );
   }
 
@@ -160,7 +161,7 @@ export class Sim {
   /** Highest point of the tower (roughly: stone centres plus their bounding radius). */
   topY(): number {
     let top = 0;
-    for (const s of this.poses()) if (s.pose.p[1] >= FALL_Y) top = Math.max(top, s.pose.p[1] + boundingRadius(s.shape));
+    for (const s of this.poses()) if (s.pose.p[1] >= FALL_Y) top = Math.max(top, s.pose.p[1] + boundingRadius(s));
     return top;
   }
 
@@ -169,11 +170,11 @@ export class Sim {
    * straight down: just above the first thing it touches. Null when it would
    * miss the base and the tower (land on the table) or is out of reach.
    */
-  dropPose(shape: Shape, x: number, z: number, q: Pose['q']): Pose | null {
+  dropPose(ref: StoneRef, x: number, z: number, q: Pose['q']): Pose | null {
     if (!Number.isFinite(x) || !Number.isFinite(z) || Math.hypot(x, z) > OUT_OF_BOUNDS) return null;
-    const startY = this.topY() + boundingRadius(shape) + 1;
+    const startY = this.topY() + boundingRadius(ref) + 1;
     const rot = { x: q[0], y: q[1], z: q[2], w: q[3] };
-    const cast = colliderDesc(shape).shape;
+    const cast = colliderDesc(ref).shape;
     // Test every collider directly: the world's broad phase only catches up
     // on the next step, so a world query would miss freshly added stones.
     let best: { toi: number; collider: RAPIER.Collider } | null = null;

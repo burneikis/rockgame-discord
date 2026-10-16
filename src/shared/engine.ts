@@ -68,7 +68,7 @@ export class Game {
   constructor(members: { id: string; name: string; isBot: boolean }[], options: GameOptions, private rand: () => number = Math.random) {
     this.options = options;
     this.sim = Sim.create(options.base);
-    this.players = members.map((m) => ({ ...m, supply: startingSupply(options.sets, () => this.nextStoneId++) }));
+    this.players = members.map((m) => ({ ...m, supply: startingSupply(options.sets, () => this.nextStoneId++, this.rand) }));
     this.turn = Math.floor(this.rand() * this.players.length);
     this.say(`${this.current.name} goes first.`);
     this.emit({ kind: 'turn', playerId: this.current.id });
@@ -140,11 +140,11 @@ export class Game {
         if (!this.allowed().includes(stone)) return `That stone doesn't fit: ${this.remaining} to place`;
         const q = normalizeQuat(action.q);
         if (!q) return 'Bad rotation';
-        const pose = this.sim.dropPose(stone.shape, action.x, action.z, q);
+        const pose = this.sim.dropPose(stone, action.x, action.z, q);
         if (!pose) return 'Place it on the base or the tower';
         me.supply = me.supply.filter((s) => s !== stone);
         this.tower.set(stone.id, stone);
-        this.sim.add(stone.id, stone.shape, pose);
+        this.sim.add(stone.id, stone, pose);
         this.lastPlaced = stone.id;
         this.emit({ kind: 'place', playerId: me.id, stoneId: stone.id });
         this.settling = { kind: 'place', stone, ticks: 0, quiet: 0 };

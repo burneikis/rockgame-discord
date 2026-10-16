@@ -11,7 +11,7 @@ export interface PlayerView {
   supply: Stone[];
 }
 
-export interface TowerStone { id: number; shape: Shape; pose: Pose }
+export interface TowerStone { id: number; shape: Shape; points?: [number, number][]; pose: Pose }
 
 export interface GameView {
   step: Step;
@@ -47,7 +47,7 @@ export interface RoomView {
 export type BodyFrame = number[];
 
 /** Someone's stone held over the tower (before they drop it). */
-export interface Aim { playerId: string; shape: Shape; pose: Pose | null }
+export interface Aim { playerId: string; stone: Stone; pose: Pose | null }
 
 export type ServerMessage =
   | { type: 'state'; you: string; devMode: boolean; room: RoomView; game: GameView | null }
@@ -66,7 +66,7 @@ export type ClientMessage =
   | { type: 'setOptions'; sets?: number; base?: BaseId; turnSeconds?: number }
   | { type: 'start' }
   | { type: 'act'; action: Action }
-  | { type: 'aim'; shape: Shape | null; pose: Pose | null }
+  | { type: 'aim'; stoneId: number; pose: Pose | null }
   | { type: 'endGame' }
   | { type: 'rigRoll'; value: number };
 

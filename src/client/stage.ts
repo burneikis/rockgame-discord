@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 import { Sim, initPhysics } from '../shared/physics';
-import { BASE_HEIGHT, DEFAULT_BASE, FALL_Y, GEOMETRY, SHAPES, baseOutline, boundingRadius, outlineRadius, placementRotation, type BaseId, type Pose, type Shape } from '../shared/stones';
+import { BASE_HEIGHT, DEFAULT_BASE, FALL_Y, SHAPES, baseOutline, boundingRadius, geometryOf, outlineRadius, placementRotation, type BaseId, type Pose, type Shape, type Stone, type StoneRef } from '../shared/stones';
 import type { BodyFrame, TowerStone } from '../shared/protocol';
 
 /**
@@ -16,7 +16,7 @@ export type StageMode =
   | { kind: 'idle' }
   | {
       kind: 'place';
-      shape: Shape;
+      stone: Stone;
       onPlace: (x: number, z: number, q: Pose['q']) => void;
       onAim: (pose: Pose | null) => void;
     }
@@ -35,13 +35,19 @@ const CLICK_PX = 6;
 const CLICK_MS = 600;
 const YAW_STEP = Math.PI / 8;
 
-interface Body { mesh: THREE.Mesh; shape: Shape; from: Pose; to: Pose }
+type StoneKind = { shape: Shape; points?: [number, number][] };
+interface Body { mesh: THREE.Mesh; stone: StoneKind; from: Pose; to: Pose }
 
-const geometryCache = new Map<Shape, THREE.BufferGeometry>();
-export function geometryFor(shape: Shape): THREE.BufferGeometry {
-  let geo = geometryCache.get(shape);
+/** Cache key: the shape, or a pentagon's own outline. */
+const geometryKey = (ref: StoneRef) =>
+  typeof ref === 'string' ? ref : ref.shape === 'pentagon' && ref.points ? `pentagon:${ref.points.join(';')}` : ref.shape;
+
+const geometryCache = new Map<string, THREE.BufferGeometry>();
+export function geometryFor(ref: StoneRef): THREE.BufferGeometry {
+  const key = geometryKey(ref);
+  let geo = geometryCache.get(key);
   if (geo) return geo;
-  const g = GEOMETRY[shape];
+  const g = geometryOf(ref);
   if (g.kind === 'box') geo = new RoundedBoxGeometry(g.hx * 2, g.hy * 2, g.hz * 2, 2, 0.025);
   else if (g.kind === 'cylinder') geo = new THREE.CylinderGeometry(g.radius, g.radius, g.height, 48);
   else if (g.kind === 'polygon') geo = polygonGeometry(g.points, -g.height / 2, g.height / 2);
@@ -50,7 +56,7 @@ export function geometryFor(shape: Shape): THREE.BufferGeometry {
     geo = new THREE.CylinderGeometry(g.radius, g.radius, g.height, g.sides).toNonIndexed();
     geo.computeVertexNormals();
   }
-  geometryCache.set(shape, geo);
+  geometryCache.set(key, geo);
   return geo;
 }
 
@@ -169,7 +175,9 @@ export class Stage {
 
   private mode: StageMode = { kind: 'idle' };
   private ghost: THREE.Mesh | null = null;
-  private ghostShape: Shape | null = null;
+  private ghostKey: number | null = null;
+  /** Every stone seen in a full state (so body frames can find pentagon outlines). */
+  private known = new Map<number, StoneKind>();
   private ghostPose: Pose | null = null;
   private aimXZ: [number, number] | null = null;
   private yaw = 0;
@@ -303,6 +311,7 @@ export class Stage {
 
   /** Full tower from a state message. */
   setTower(tick: number, stones: TowerStone[]) {
+    for (const s of stones) this.known.set(s.id, { shape: s.shape, points: s.points });
     this.applyPoses(tick, stones);
     this.pendingTower = stones;
     if (this.physicsReady) this.rebuildSim(stones);
@@ -312,7 +321,12 @@ export class Stage {
   pushFrame(tick: number, frames: BodyFrame[]) {
     this.applyPoses(
       tick,
-      frames.map((f) => ({ id: f[0], shape: SHAPES[f[1]], pose: { p: [f[2], f[3], f[4]], q: [f[5], f[6], f[7], f[8]] } })),
+      frames.map((f) => ({
+        id: f[0],
+        shape: SHAPES[f[1]],
+        points: this.known.get(f[0])?.points,
+        pose: { p: [f[2], f[3], f[4]], q: [f[5], f[6], f[7], f[8]] },
+      })),
     );
   }
 
@@ -334,12 +348,12 @@ export class Stage {
       } else {
         const mat = this.stoneMaterial.clone();
         mat.color.set(SHAPE_COLORS[s.shape]);
-        const mesh = new THREE.Mesh(geometryFor(s.shape), mat);
+        const mesh = new THREE.Mesh(geometryFor(s), mat);
         mesh.castShadow = mesh.receiveShadow = true;
         mesh.userData.stoneId = s.id;
         setPose(mesh, s.pose);
         this.scene.add(mesh);
-        this.bodies.set(s.id, { mesh, shape: s.shape, from: s.pose, to: s.pose });
+        this.bodies.set(s.id, { mesh, stone: { shape: s.shape, points: s.points }, from: s.pose, to: s.pose });
       }
     }
     for (const [id, b] of this.bodies) {
@@ -358,13 +372,13 @@ export class Stage {
     this.simKey = key;
     this.sim?.free();
     this.sim = Sim.create(this.baseId);
-    for (const s of stones) this.sim.add(s.id, s.shape, s.pose, true);
+    for (const s of stones) this.sim.add(s.id, s, s.pose, true);
     this.recomputeGhost();
   }
 
   private towerTop(): number {
     let top = 0;
-    for (const b of this.bodies.values()) if (b.to.p[1] > FALL_Y) top = Math.max(top, b.to.p[1] + boundingRadius(b.shape));
+    for (const b of this.bodies.values()) if (b.to.p[1] > FALL_Y) top = Math.max(top, b.to.p[1] + boundingRadius(b.stone));
     return top;
   }
 
@@ -375,26 +389,26 @@ export class Stage {
     this.mode = mode;
     if (mode.kind !== 'pickup') this.setHovered(null);
     if (mode.kind === 'place') {
-      if (this.ghostShape !== mode.shape) {
+      if (this.ghostKey !== mode.stone.id) {
         this.ghost && this.scene.remove(this.ghost);
-        this.ghost = this.makeGhost(mode.shape, '#7dffa8');
-        this.ghostShape = mode.shape;
+        this.ghost = this.makeGhost(mode.stone, '#7dffa8');
+        this.ghostKey = mode.stone.id;
         this.scene.add(this.ghost);
       }
-      if (prev.kind !== 'place' || prev.shape !== mode.shape) this.recomputeGhost();
+      if (prev.kind !== 'place' || prev.stone.id !== mode.stone.id) this.recomputeGhost();
     } else {
       if (this.ghost) this.scene.remove(this.ghost);
       this.ghost = null;
-      this.ghostShape = null;
+      this.ghostKey = null;
       this.ghostPose = null;
       if (prev.kind === 'place') this.onGhostChange(false);
     }
     this.renderer.domElement.style.cursor = mode.kind === 'idle' ? 'grab' : 'crosshair';
   }
 
-  private makeGhost(shape: Shape, color: string): THREE.Mesh {
+  private makeGhost(stone: StoneRef, color: string): THREE.Mesh {
     const mesh = new THREE.Mesh(
-      geometryFor(shape),
+      geometryFor(stone),
       new THREE.MeshStandardMaterial({ color, transparent: true, opacity: 0.55, roughness: 0.6, depthWrite: false }),
     );
     mesh.renderOrder = 2;
@@ -419,18 +433,18 @@ export class Stage {
   }
 
   /** Show another player's stone hovering where they aim. */
-  setOtherAim(shape: Shape | null, pose: Pose | null) {
-    if (this.otherGhost && (!shape || this.otherGhost.userData.shape !== shape)) {
+  setOtherAim(stone: Stone | null, pose: Pose | null) {
+    if (this.otherGhost && (!stone || this.otherGhost.userData.stoneId !== stone.id)) {
       this.scene.remove(this.otherGhost);
       this.otherGhost = null;
     }
-    if (!shape || !pose) {
+    if (!stone || !pose) {
       if (this.otherGhost) this.otherGhost.visible = false;
       return;
     }
     if (!this.otherGhost) {
-      this.otherGhost = this.makeGhost(shape, '#8fd6ff');
-      this.otherGhost.userData.shape = shape;
+      this.otherGhost = this.makeGhost(stone, '#8fd6ff');
+      this.otherGhost.userData.stoneId = stone.id;
       this.scene.add(this.otherGhost);
     }
     this.otherGhost.visible = true;
@@ -449,7 +463,7 @@ export class Stage {
       return;
     }
     const [x, z] = this.aimXZ;
-    const pose = this.sim.dropPose(mode.shape, x, z, q);
+    const pose = this.sim.dropPose(mode.stone, x, z, q);
     const mat = this.ghost.material as THREE.MeshStandardMaterial;
     this.ghost.visible = true;
     if (pose) {

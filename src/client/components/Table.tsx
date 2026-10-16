@@ -56,7 +56,7 @@ export function Table({ state, game, send, subscribe }: { state: StateMessage; g
         const s = stage.current;
         if (!s) return;
         if (msg.type === 'bodies') s.pushFrame(msg.tick, msg.bodies);
-        else if (msg.aim.playerId === turnRef.current.turnId && turnRef.current.step === 'place') s.setOtherAim(msg.aim.shape, msg.aim.pose);
+        else if (msg.aim.playerId === turnRef.current.turnId && turnRef.current.step === 'place') s.setOtherAim(msg.aim.stone, msg.aim.pose);
       }),
     [subscribe],
   );
@@ -150,13 +150,13 @@ export function Table({ state, game, send, subscribe }: { state: StateMessage; g
 
   const aimState = useRef<{ last: number; pending: Pose | null; timer?: number }>({ last: 0, pending: null });
   const sendAim = useCallback(
-    (shape: Stone['shape'], pose: Pose | null) => {
+    (stoneId: number, pose: Pose | null) => {
       const a = aimState.current;
       a.pending = pose;
       const flush = () => {
         a.last = Date.now();
         a.timer = undefined;
-        send({ type: 'aim', shape, pose: a.pending });
+        send({ type: 'aim', stoneId, pose: a.pending });
       };
       if (a.timer) return;
       const wait = AIM_EVERY_MS - (Date.now() - a.last);
@@ -166,24 +166,27 @@ export function Table({ state, game, send, subscribe }: { state: StateMessage; g
     [send],
   );
 
+  // Stone objects are new on every state update; key the effect on the id.
+  const chosenRef = useRef(chosen);
+  chosenRef.current = chosen;
   const chosenId = chosen?.id ?? null;
-  const chosenShape = chosen?.shape ?? null;
   useEffect(() => {
     const s = stage.current;
     if (!s) return;
     let mode: StageMode = { kind: 'idle' };
-    if (chosenId !== null && chosenShape) {
+    const stone = chosenRef.current;
+    if (chosenId !== null && stone) {
       mode = {
         kind: 'place',
-        shape: chosenShape,
-        onAim: (pose) => sendAim(chosenShape, pose),
+        stone,
+        onAim: (pose) => sendAim(chosenId, pose),
         onPlace: (x, z, q) => send({ type: 'act', action: { kind: 'place', stoneId: chosenId, x, z, q } }),
       };
     } else if (picking) {
       mode = { kind: 'pickup', onPick: (stoneId) => send({ type: 'act', action: { kind: 'pickup', stoneId } }) };
     }
     s.setMode(mode);
-  }, [chosenId, chosenShape, picking, send, sendAim]);
+  }, [chosenId, picking, send, sendAim]);
 
   const roll = useCallback(() => send({ type: 'act', action: { kind: 'roll' } }), [send]);
 
@@ -316,7 +319,7 @@ export function Table({ state, game, send, subscribe }: { state: StateMessage; g
                       title={`${SHAPE_NAMES[s.shape]} (${VALUE[s.shape]})`}
                       onClick={() => setSelected(s.id)}
                     >
-                      <StoneIcon shape={s.shape} size={38} showValue />
+                      <StoneIcon shape={s.shape} points={s.points} size={38} showValue />
                     </button>
                   ))}
                 {me.supply.length === 0 && <span className="muted">No stones left</span>}
@@ -400,7 +403,7 @@ function PlayerRow({ p, isYou, isTurn, timerFrac }: { p: PlayerView; isYou: bool
         {[...p.supply]
           .sort((a, b) => VALUE[a.shape] - VALUE[b.shape])
           .map((s) => (
-            <StoneIcon key={s.id} shape={s.shape} size={16} />
+            <StoneIcon key={s.id} shape={s.shape} points={s.points} size={16} />
           ))}
       </div>
       {timerFrac !== null && (

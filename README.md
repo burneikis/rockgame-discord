@@ -65,8 +65,11 @@ src/client/components/  React UI (lobby, table HUD)
   whatever falls as a result is yours.
 - If you can't make the roll and the tower is empty, the turn passes.
 - Options: one set of stones each (6) or the tournament variant (12).
-- The pentagon is deliberately lopsided (one short side, uneven corners): it's
-  the strange piece. The shaft is a short bar (1.5 long).
+- Pentagons are the strange piece: every pentagon is randomised when the game
+  starts (convex, uneven corners, a mix of long and short sides, face area
+  0.75 to 1.15; see `randomPentagon` in `src/shared/stones.ts`). Each stone
+  keeps its outline for the whole game, so a pentagon that falls or is taken
+  by another player is still the same piece. The shaft is a short bar (1.5 long).
 
 ### Base rocks
 

@@ -7,6 +7,12 @@ import {
   BASE_HEIGHT,
   BASE_IDS,
   GEOMETRY,
+  PENTAGON_MAX_AREA,
+  PENTAGON_MIN_AREA,
+  maxCorner,
+  polygonArea,
+  randomPentagon,
+  sideLengths,
   allowedStones,
   baseOutline,
   canMake,
@@ -60,6 +66,57 @@ describe('geometry', () => {
     expect(lowestY('cube', { p: [0, 0.38, 0], q: [0, 0, 0, 1] })).toBeCloseTo(0);
     expect(lowestY('cube', { p: [0, 1, 0], q: quatAxis(0, 0, 1, Math.PI / 4) })).toBeCloseTo(1 - 0.38 * Math.SQRT2);
     expect(lowestY('shaft', { p: [0, 1, 0], q: quatAxis(0, 0, 1, Math.PI / 2) })).toBeCloseTo(0.25);
+  });
+});
+
+describe('pentagons', () => {
+  it('are random, convex, within the area limits, with long and short sides', () => {
+    const rand = seeded(42);
+    const seen = new Set<string>();
+    let ratios = 0;
+    for (let i = 0; i < 300; i++) {
+      const p = randomPentagon(rand);
+      expect(p).toHaveLength(5);
+      expect(isConvex(p)).toBe(true);
+      expect(maxCorner(p)).toBeLessThanOrEqual(160.5);
+      const area = polygonArea(p);
+      expect(area).toBeLessThanOrEqual(PENTAGON_MAX_AREA + 0.01);
+      expect(area).toBeGreaterThanOrEqual(PENTAGON_MIN_AREA - 0.01);
+      const sides = sideLengths(p);
+      ratios += Math.max(...sides) / Math.min(...sides);
+      seen.add(p.join(';'));
+    }
+    expect(seen.size).toBe(300);
+    expect(ratios / 300).toBeGreaterThan(1.6);
+  });
+
+  it('every player starts with their own pentagon, and it keeps its shape when it changes hands', () => {
+    const g = new Game(members(3), { sets: 2, base: 'boulder' }, seeded(11));
+    const pentagons = g.players.flatMap((p) => p.supply.filter((s) => s.shape === 'pentagon'));
+    expect(pentagons).toHaveLength(6);
+    expect(new Set(pentagons.map((s) => s.points!.join(';'))).size).toBe(6);
+
+    const a = g.current;
+    a.supply = a.supply.filter((s) => s.shape === 'pentagon');
+    const mine = a.supply[0];
+    const outline = mine.points!.join(';');
+    g.rigRoll(5);
+    g.act(a.id, { kind: 'roll' });
+    expect(g.act(a.id, { kind: 'place', stoneId: mine.id, x: 0, z: 0, q: [0, 0, 0, 1] })).toBeNull();
+    g.settle();
+    expect(g.sim.poses().find((s) => s.id === mine.id)!.points!.join(';')).toBe(outline);
+
+    const b = g.current;
+    b.supply = [];
+    b.supply.push({ id: 999, shape: 'cube' });
+    g.rigRoll(1);
+    g.act(b.id, { kind: 'roll' });
+    expect(g.step).toBe('pickup');
+    g.act(b.id, { kind: 'pickup', stoneId: mine.id });
+    g.settle();
+    const taken = b.supply.find((s) => s.id === mine.id)!;
+    expect(taken.points!.join(';')).toBe(outline);
+    g.dispose();
   });
 });
 

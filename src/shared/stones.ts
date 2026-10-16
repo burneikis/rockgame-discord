@@ -18,7 +18,15 @@ export const SHAPE_NAMES: Record<Shape, string> = {
 /** Die face for each shape (circle = 1 ... cube = 6). */
 export const VALUE: Record<Shape, number> = { circle: 1, shaft: 2, triangle: 3, square: 4, pentagon: 5, cube: 6 };
 
-export interface Stone { id: number; shape: Shape }
+/**
+ * A stone. Pentagons are each a little different: they carry their own
+ * outline (x, z points), generated when the game starts and kept for good,
+ * so whoever ends up holding one holds the same piece.
+ */
+export interface Stone { id: number; shape: Shape; points?: [number, number][] }
+
+/** A shape name, or a stone (whose own outline wins for pentagons). */
+export type StoneRef = Shape | { shape: Shape; points?: [number, number][] };
 
 /** Slab thickness of the flat stones. */
 export const THICK = 0.3;
@@ -100,6 +108,83 @@ export const GEOMETRY: Record<Shape, Geometry> = {
   cube: { kind: 'box', hx: 0.38, hy: 0.38, hz: 0.38 },
 };
 
+/** The geometry of a particular stone. */
+export function geometryOf(ref: StoneRef): Geometry {
+  if (typeof ref === 'string') return GEOMETRY[ref];
+  if (ref.shape === 'pentagon' && ref.points) return { kind: 'polygon', points: ref.points, height: THICK };
+  return GEOMETRY[ref.shape];
+}
+
+/** Pentagon top faces are capped at this area, and kept above the minimum. */
+export const PENTAGON_MAX_AREA = 1.15;
+export const PENTAGON_MIN_AREA = 0.75;
+const PENTAGON_MIN_SIDE = 0.22;
+/** No corner flatter than this (degrees), so it still reads as five-sided. */
+const PENTAGON_MAX_CORNER = 160;
+
+/**
+ * A random convex pentagon: uneven corner angles and distances give a mix of
+ * long and short sides. Scaled down if its face is over the max area.
+ */
+export function randomPentagon(rand: () => number): [number, number][] {
+  for (let attempt = 0; attempt < 200; attempt++) {
+    // Five directions with uneven gaps (each gap 35..110 degrees, summing to 360).
+    const gaps = Array.from({ length: 5 }, () => 0.5 + rand());
+    const total = gaps.reduce((a, b) => a + b, 0);
+    let angle = rand() * Math.PI * 2;
+    const pts: [number, number][] = [];
+    for (const g of gaps) {
+      const r = 0.5 + rand() * 0.4;
+      pts.push([r * Math.cos(angle), r * Math.sin(angle)]);
+      angle += (g / total) * Math.PI * 2;
+    }
+    if (!isConvex(pts) || maxCorner(pts) > PENTAGON_MAX_CORNER) continue;
+    const area = polygonArea(pts);
+    const target = Math.min(PENTAGON_MAX_AREA, Math.max(PENTAGON_MIN_AREA, area));
+    const out = centred(pts, Math.sqrt(target / area)).map(([x, z]) => [round3(x), round3(z)] as [number, number]);
+    if (Math.min(...sideLengths(out)) < PENTAGON_MIN_SIDE) continue;
+    // Keep the points counter-clockwise for consistency.
+    return signedArea(out) < 0 ? out.reverse() : out;
+  }
+  const g = GEOMETRY.pentagon;
+  return g.kind === 'polygon' ? g.points : [];
+}
+
+const round3 = (n: number) => Math.round(n * 1000) / 1000;
+
+function signedArea(points: [number, number][]): number {
+  let a = 0;
+  for (let i = 0; i < points.length; i++) {
+    const [x1, z1] = points[i];
+    const [x2, z2] = points[(i + 1) % points.length];
+    a += x1 * z2 - x2 * z1;
+  }
+  return a / 2;
+}
+
+export function sideLengths(points: [number, number][]): number[] {
+  return points.map(([x, z], i) => {
+    const [x2, z2] = points[(i + 1) % points.length];
+    return Math.hypot(x2 - x, z2 - z);
+  });
+}
+
+/** Largest interior angle, in degrees. */
+export function maxCorner(points: [number, number][]): number {
+  const n = points.length;
+  let max = 0;
+  for (let i = 0; i < n; i++) {
+    const [ax, az] = points[(i + n - 1) % n];
+    const [bx, bz] = points[i];
+    const [cx, cz] = points[(i + 1) % n];
+    const u = [ax - bx, az - bz];
+    const v = [cx - bx, cz - bz];
+    const cos = (u[0] * v[0] + u[1] * v[1]) / (Math.hypot(u[0], u[1]) * Math.hypot(v[0], v[1]));
+    max = Math.max(max, (Math.acos(Math.min(1, Math.max(-1, cos))) * 180) / Math.PI);
+  }
+  return max;
+}
+
 export function prismPoints(sides: number, radius: number, height: number): number[] {
   const pts: number[] = [];
   for (const y of [-height / 2, height / 2]) {
@@ -119,8 +204,8 @@ export function polygonPoints(points: [number, number][], bottom: number, top: n
 }
 
 /** Corner points of a stone in its own frame (the cylinder's rim sampled). */
-export function hullPoints(shape: Shape): number[] {
-  const g = GEOMETRY[shape];
+export function hullPoints(ref: StoneRef): number[] {
+  const g = geometryOf(ref);
   if (g.kind === 'prism') return prismPoints(g.sides, g.radius, g.height);
   if (g.kind === 'polygon') return polygonPoints(g.points, -g.height / 2, g.height / 2);
   if (g.kind === 'cylinder') return prismPoints(16, g.radius, g.height);
@@ -130,9 +215,9 @@ export function hullPoints(shape: Shape): number[] {
 }
 
 /** Lowest point of a stone in world space. */
-export function lowestY(shape: Shape, pose: Pose): number {
+export function lowestY(ref: StoneRef, pose: Pose): number {
   const [qx, qy, qz, qw] = pose.q;
-  const pts = hullPoints(shape);
+  const pts = hullPoints(ref);
   let min = Infinity;
   for (let i = 0; i < pts.length; i += 3) {
     const [x, y, z] = [pts[i], pts[i + 1], pts[i + 2]];
@@ -148,8 +233,8 @@ export function lowestY(shape: Shape, pose: Pose): number {
 }
 
 /** Radius of a sphere around the stone's centre that contains it. */
-export function boundingRadius(shape: Shape): number {
-  const g = GEOMETRY[shape];
+export function boundingRadius(ref: StoneRef): number {
+  const g = geometryOf(ref);
   if (g.kind === 'box') return Math.hypot(g.hx, g.hy, g.hz);
   if (g.kind === 'polygon') return Math.hypot(Math.max(...g.points.map(([x, z]) => Math.hypot(x, z))), g.height / 2);
   return Math.hypot(g.radius, g.height / 2);
@@ -216,9 +301,11 @@ export const FALL_Y = -0.05;
 export const TABLE_TOUCH = 0.04;
 
 /** Stones per player for one set (one of every shape). */
-export function startingSupply(sets: number, nextId: () => number): Stone[] {
+export function startingSupply(sets: number, nextId: () => number, rand: () => number = Math.random): Stone[] {
   const out: Stone[] = [];
-  for (let s = 0; s < sets; s++) for (const shape of SHAPES) out.push({ id: nextId(), shape });
+  for (let s = 0; s < sets; s++) {
+    for (const shape of SHAPES) out.push(shape === 'pentagon' ? { id: nextId(), shape, points: randomPentagon(rand) } : { id: nextId(), shape });
+  }
   return out;
 }
 

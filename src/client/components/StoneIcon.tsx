@@ -12,6 +12,9 @@ function outlinePoints(points: [number, number][], scale: number) {
   return points.map(([x, z]) => `${(x * scale).toFixed(3)},${(z * scale).toFixed(3)}`).join(' ');
 }
 
+/** Draw pentagons big, but never past the icon's edge. */
+const fitScale = (pts: [number, number][]) => Math.min(1.15, 0.92 / Math.max(...pts.map(([x, z]) => Math.hypot(x, z))));
+
 const PENTAGON = GEOMETRY.pentagon.kind === 'polygon' ? GEOMETRY.pentagon.points : [];
 
 /** Top view of a base rock, scaled so the biggest base fills the box. */
@@ -31,7 +34,18 @@ export function BaseIcon({ id, size = 40, maxRadius }: { id: BaseId; size?: numb
 export const maxBaseRadius = (ids: BaseId[]) => Math.max(...ids.map((id) => outlineRadius(baseOutline(id))));
 
 /** Flat icon of a stone, as seen from above (the cube in a little 3D). */
-export function StoneIcon({ shape, size = 34, showValue = false }: { shape: Shape; size?: number; showValue?: boolean }) {
+export function StoneIcon({
+  shape,
+  points,
+  size = 34,
+  showValue = false,
+}: {
+  shape: Shape;
+  /** A pentagon's own outline. */
+  points?: [number, number][];
+  size?: number;
+  showValue?: boolean;
+}) {
   const fill = SHAPE_COLORS[shape];
   const common = { fill, stroke: '#0008', strokeWidth: 0.06, strokeLinejoin: 'round' as const };
   return (
@@ -40,7 +54,7 @@ export function StoneIcon({ shape, size = 34, showValue = false }: { shape: Shap
       {shape === 'shaft' && <rect x={-0.75} y={-0.17} width={1.5} height={0.34} rx={0.04} {...common} transform="rotate(-35)" />}
       {shape === 'triangle' && <polygon points={polygon(3, 0.85)} transform="translate(0 0.12)" {...common} />}
       {shape === 'square' && <rect x={-0.62} y={-0.62} width={1.24} height={1.24} rx={0.04} {...common} />}
-      {shape === 'pentagon' && <polygon points={outlinePoints(PENTAGON, 1.15)} {...common} />}
+      {shape === 'pentagon' && <polygon points={outlinePoints(points ?? PENTAGON, fitScale(points ?? PENTAGON))} {...common} />}
       {shape === 'cube' && (
         <g {...common}>
           <polygon points="0,-0.8 0.7,-0.4 0,0 -0.7,-0.4" style={{ filter: 'brightness(1.25)' }} />

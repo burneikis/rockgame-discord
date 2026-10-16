@@ -33,8 +33,12 @@ interface Candidate { stone: Stone; x: number; z: number; q: Pose['q']; pose: Po
 
 function placeAction(game: Game, rand: () => number): Action {
   const allowed = game.allowed();
-  const byShape = new Map<Shape, Stone>();
-  for (const s of allowed) if (!byShape.has(s.shape)) byShape.set(s.shape, s);
+  // One candidate per shape; every pentagon is different, so each gets tried.
+  const byShape = new Map<Shape | number, Stone>();
+  for (const s of allowed) {
+    const key = s.shape === 'pentagon' ? s.id : s.shape;
+    if (!byShape.has(key)) byShape.set(key, s);
+  }
   const tower = game.sim.poses().filter((s) => !game.sim.isFallen(s.id));
 
   // Spots to try: the base, and on top of every stone.
@@ -54,7 +58,7 @@ function placeAction(game: Game, rand: () => number): Action {
     for (const [x, z] of spots) {
       const yaw = rand() * Math.PI * 2;
       const q = placementRotation(yaw, 0);
-      const pose = game.sim.dropPose(stone.shape, x, z, q);
+      const pose = game.sim.dropPose(stone, x, z, q);
       if (!pose) continue;
       // Lower and more central is safer; fewer pips per stone sheds more stones.
       const guess = -pose.p[1] * 0.6 - Math.hypot(x, z) * 0.25 - VALUE[stone.shape] * 0.05 + rand() * 0.2;
@@ -72,7 +76,7 @@ function placeAction(game: Game, rand: () => number): Action {
   for (const c of cands.slice(0, SHORTLIST)) {
     const trial = game.sim.clone();
     try {
-      trial.add(-1, c.stone.shape, c.pose);
+      trial.add(-1, c.stone, c.pose);
       trial.step(TRY_TICKS);
       const { fell, moved } = disturbance(game.sim, trial);
       const self = trial.pose(-1)!;
