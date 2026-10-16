@@ -102,7 +102,7 @@ export const GEOMETRY: Record<Shape, Geometry> = {
   // The odd one out: a lopsided pentagon with one short side and uneven corners.
   pentagon: {
     kind: 'polygon',
-    points: centred([[0.15, 0.78], [0.62, 0.52], [0.66, -0.5], [-0.35, -0.72], [-0.78, 0.18]], 0.85),
+    points: centred([[0.15, 0.78], [0.62, 0.52], [0.66, -0.5], [-0.35, -0.72], [-0.78, 0.18]], 0.6),
     height: THICK,
   },
   cube: { kind: 'box', hx: 0.38, hy: 0.38, hz: 0.38 },
@@ -115,16 +115,16 @@ export function geometryOf(ref: StoneRef): Geometry {
   return GEOMETRY[ref.shape];
 }
 
-/** Pentagon top faces are capped at this area, and kept above the minimum. */
-export const PENTAGON_MAX_AREA = 1.15;
-export const PENTAGON_MIN_AREA = 0.75;
-const PENTAGON_MIN_SIDE = 0.22;
+/** Pentagon face areas are picked between these. */
+export const PENTAGON_MAX_AREA = 0.575;
+export const PENTAGON_MIN_AREA = 0.35;
+const PENTAGON_MIN_SIDE = 0.15;
 /** No corner flatter than this (degrees), so it still reads as five-sided. */
 const PENTAGON_MAX_CORNER = 160;
 
 /**
  * A random convex pentagon: uneven corner angles and distances give a mix of
- * long and short sides. Scaled down if its face is over the max area.
+ * long and short sides, scaled to a random face area within the limits.
  */
 export function randomPentagon(rand: () => number): [number, number][] {
   for (let attempt = 0; attempt < 200; attempt++) {
@@ -139,8 +139,9 @@ export function randomPentagon(rand: () => number): [number, number][] {
       angle += (g / total) * Math.PI * 2;
     }
     if (!isConvex(pts) || maxCorner(pts) > PENTAGON_MAX_CORNER) continue;
+    // Scale to a random face area between the min and max.
     const area = polygonArea(pts);
-    const target = Math.min(PENTAGON_MAX_AREA, Math.max(PENTAGON_MIN_AREA, area));
+    const target = PENTAGON_MIN_AREA + rand() * (PENTAGON_MAX_AREA - PENTAGON_MIN_AREA);
     const out = centred(pts, Math.sqrt(target / area)).map(([x, z]) => [round3(x), round3(z)] as [number, number]);
     if (Math.min(...sideLengths(out)) < PENTAGON_MIN_SIDE) continue;
     // Keep the points counter-clockwise for consistency.

@@ -67,7 +67,7 @@ src/client/components/  React UI (lobby, table HUD)
 - Options: one set of stones each (6) or the tournament variant (12).
 - Pentagons are the strange piece: every pentagon is randomised when the game
   starts (convex, uneven corners, a mix of long and short sides, face area
-  0.75 to 1.15; see `randomPentagon` in `src/shared/stones.ts`). Each stone
+  random between 0.35 and 0.575; see `randomPentagon` in `src/shared/stones.ts`). Each stone
   keeps its outline for the whole game, so a pentagon that falls or is taken
   by another player is still the same piece. The shaft is a short bar (1.5 long).
 
