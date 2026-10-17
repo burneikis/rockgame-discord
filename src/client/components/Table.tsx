@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { ClientMessage, GameView, PlayerView } from '../../shared/protocol';
 import { ROLL_MS } from '../../shared/protocol';
 import { BASES, SHAPE_NAMES, VALUE, type Pose, type Stone } from '../../shared/stones';
-import { Stage, type StageMode } from '../stage';
+import { Stage, type RotateAxis, type StageMode } from '../stage';
 import { play, setMuted, useMuted } from '../sound';
 import type { StateMessage, Subscribe } from '../useConnection';
 import { StoneIcon } from './StoneIcon';
@@ -213,9 +213,18 @@ export function Table({ state, game, send, subscribe }: { state: StateMessage; g
         e.preventDefault();
         roll();
       } else if (placing && s) {
-        if (e.key === 'q' || e.key === 'Q') s.rotate(-1);
-        else if (e.key === 'e' || e.key === 'E') s.rotate(1);
-        else if (e.key === 'r' || e.key === 'R') s.tip();
+        const angle = e.shiftKey ? Math.PI / 2 : undefined;
+        const keys: Record<string, [RotateAxis, number]> = {
+          q: ['yaw', -1],
+          e: ['yaw', 1],
+          r: ['pitch', -1],
+          f: ['pitch', 1],
+          z: ['roll', -1],
+          c: ['roll', 1],
+        };
+        const k = keys[e.key.toLowerCase()];
+        if (k) s.rotate(k[0], k[1], angle);
+        else if (e.key === 'x' || e.key === 'X') s.resetRotation();
         else if (e.key === 'Enter') s.drop();
       }
     };
@@ -338,7 +347,7 @@ export function Table({ state, game, send, subscribe }: { state: StateMessage; g
                 <Die value={game.roll} rolling={rolling} face={face} />
                 <div className="status">
                   <div className="status-main ellipsis">{status}</div>
-                  {placing && <div className="muted small">Click the tower to drop. Drag to look around. Q/E rotate, R tip over.</div>}
+                  {placing && <div className="muted small">Click the tower to drop. Drag to look around. Q/E spin, R/F tip forward/back, Z/C roll, X reset. Hold Shift for 90 degrees. Aim at the side of a stone to tuck under an overhang.</div>}
                   {picking && <div className="muted small">Click a stone to take it. Anything that falls is yours too.</div>}
                   {canRoll && <div className="muted small">Press Space or the button.</div>}
                 </div>
@@ -349,14 +358,26 @@ export function Table({ state, game, send, subscribe }: { state: StateMessage; g
                 )}
                 {placing && (
                   <div className="row place-tools">
-                    <button className="btn" title="Rotate left (Q)" onClick={() => stage.current?.rotate(-1)}>
+                    <button className="btn" title="Spin left (Q)" onClick={() => stage.current?.rotate('yaw', -1)}>
                       &#8634;
                     </button>
-                    <button className="btn" title="Rotate right (E)" onClick={() => stage.current?.rotate(1)}>
+                    <button className="btn" title="Spin right (E)" onClick={() => stage.current?.rotate('yaw', 1)}>
                       &#8635;
                     </button>
-                    <button className="btn" title="Tip over (R)" onClick={() => stage.current?.tip()}>
-                      Tip
+                    <button className="btn" title="Tip forward (R)" onClick={() => stage.current?.rotate('pitch', -1)}>
+                      &#8593;
+                    </button>
+                    <button className="btn" title="Tip back (F)" onClick={() => stage.current?.rotate('pitch', 1)}>
+                      &#8595;
+                    </button>
+                    <button className="btn" title="Roll left (Z)" onClick={() => stage.current?.rotate('roll', -1)}>
+                      &#8592;
+                    </button>
+                    <button className="btn" title="Roll right (C)" onClick={() => stage.current?.rotate('roll', 1)}>
+                      &#8594;
+                    </button>
+                    <button className="btn" title="Reset rotation (X)" onClick={() => stage.current?.resetRotation()}>
+                      Reset
                     </button>
                     <button className="btn primary" disabled={!ghostValid} title="Drop (Enter)" onClick={() => stage.current?.drop()}>
                       Drop

@@ -198,9 +198,11 @@ export class Sim {
     let startY = topStart;
     let hit: { toi: number; collider: RAPIER.Collider } | null = null;
     if (aimY !== undefined && Number.isFinite(aimY)) {
-      // Climb from just above the aimed surface to the first spot where the
-      // stone isn't already overlapping something.
-      for (let y = Math.max(aimY, FALL_Y) + r + DROP_GAP; y < topStart; y += AIM_STEP) {
+      // Climb from where the stone's underside sits just on the aimed surface
+      // to the first spot where it isn't overlapping something. Using the
+      // real underside (not the bounding radius) lets it fit into tight gaps.
+      const below = -lowestY(ref, { p: [0, 0, 0], q });
+      for (let y = Math.max(aimY, FALL_Y) + below + DROP_GAP; y < topStart; y += AIM_STEP) {
         const h = tryFrom(y);
         if (h && h.toi > 1e-4) {
           startY = y;

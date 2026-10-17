@@ -165,6 +165,7 @@ input, select {
 .hud-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
 .status { flex: 1; min-width: 160px; }
 .status-main { font-size: 17px; font-weight: 800; }
+.place-tools { flex-wrap: wrap; }
 .place-tools .btn { min-width: 42px; }
 
 .tray { display: flex; flex-wrap: wrap; gap: 6px; }

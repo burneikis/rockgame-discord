@@ -165,6 +165,18 @@ describe('stones and bases', () => {
     expect(sim.dropPose('circle', 0, 0, flat, 1 + THICK / 2)!.p[1]).toBeGreaterThan(1);
     sim.free();
   });
+
+  it('fits a stone into a gap only a bit taller than it, when aiming at the side of the lower stone', () => {
+    const sim = Sim.create('boulder');
+    const flat: [number, number, number, number] = [0, 0, 0, 1];
+    sim.add(1, 'square', { p: [0, THICK / 2, 0], q: flat }, true);
+    // Overhang leaves a gap of 1.6 stone thicknesses above the lower square.
+    sim.add(2, 'square', { p: [0, THICK * 3.1, 0], q: flat }, true);
+    const under = sim.dropPose('circle', 0, 0, flat, THICK / 2)!;
+    expect(under.p[1]).toBeGreaterThan(THICK);
+    expect(under.p[1]).toBeLessThan(THICK * 1.7);
+    sim.free();
+  });
 });
 
 describe('game flow', () => {

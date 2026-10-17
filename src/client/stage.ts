@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 import { Sim, initPhysics } from '../shared/physics';
-import { BASE_HEIGHT, DEFAULT_BASE, FALL_Y, SHAPES, baseOutline, boundingRadius, geometryOf, outlineRadius, placementRotation, type BaseId, type Pose, type Shape, type Stone, type StoneRef } from '../shared/stones';
+import { BASE_HEIGHT, DEFAULT_BASE, FALL_Y, SHAPES, baseOutline, boundingRadius, geometryOf, outlineRadius, type BaseId, type Pose, type Shape, type Stone, type StoneRef } from '../shared/stones';
 import type { BodyFrame, TowerStone } from '../shared/protocol';
 
 /**
@@ -33,7 +33,12 @@ export const SHAPE_COLORS: Record<Shape, string> = {
 
 const CLICK_PX = 6;
 const CLICK_MS = 600;
-const YAW_STEP = Math.PI / 8;
+/** Rotation step for the rotate keys/buttons (Shift: a quarter turn). */
+const ROT_STEP = Math.PI / 12;
+/** Pointing at the side of a stone aims this far into it, so the new stone rests on it. */
+const SIDE_INSET = 0.25;
+
+export type RotateAxis = 'yaw' | 'pitch' | 'roll';
 
 type StoneKind = { shape: Shape; points?: [number, number][] };
 interface Body { mesh: THREE.Mesh; stone: StoneKind; from: Pose; to: Pose }
@@ -182,8 +187,8 @@ export class Stage {
   private aimXZ: [number, number] | null = null;
   /** Height of the surface under the pointer, so stones can go under overhangs. */
   private aimY: number | undefined = undefined;
-  private yaw = 0;
-  private tilt = 0;
+  /** Rotation of the stone being placed. */
+  private rot = new THREE.Quaternion();
   private otherGhost: THREE.Mesh | null = null;
   private hovered: number | null = null;
   private down: { x: number; y: number; t: number } | null = null;
@@ -418,13 +423,24 @@ export class Stage {
     return mesh;
   }
 
-  rotate(steps: number) {
-    this.yaw += steps * YAW_STEP;
+  /**
+   * Turn the held stone. Yaw spins it around the vertical; pitch and roll tip
+   * it toward/away from the camera and sideways, relative to the view.
+   */
+  rotate(axis: RotateAxis, steps: number, angle = ROT_STEP) {
+    const fwd = new THREE.Vector3();
+    this.camera.getWorldDirection(fwd);
+    fwd.y = 0;
+    if (fwd.lengthSq() < 1e-6) fwd.set(0, 0, -1);
+    fwd.normalize();
+    const right = new THREE.Vector3().crossVectors(fwd, new THREE.Vector3(0, 1, 0)).normalize();
+    const a = axis === 'yaw' ? new THREE.Vector3(0, 1, 0) : axis === 'pitch' ? right : fwd;
+    this.rot.premultiply(new THREE.Quaternion().setFromAxisAngle(a, steps * angle)).normalize();
     this.recomputeGhost();
   }
 
-  tip() {
-    this.tilt = (this.tilt + 1) % 3;
+  resetRotation() {
+    this.rot.identity();
     this.recomputeGhost();
   }
 
@@ -456,7 +472,7 @@ export class Stage {
   private recomputeGhost() {
     const mode = this.mode;
     if (mode.kind !== 'place' || !this.ghost) return;
-    const q = placementRotation(this.yaw, this.tilt);
+    const q = this.rot.toArray() as Pose['q'];
     if (!this.aimXZ || !this.sim) {
       this.ghost.visible = false;
       this.ghostPose = null;
@@ -500,6 +516,17 @@ export class Stage {
       point = this.raycaster.ray.intersectPlane(plane, new THREE.Vector3());
     }
     this.aimY = hit?.point.y;
+    if (hit?.face && point) {
+      // On the side of a stone (e.g. under an overhang), aim a little into
+      // it so the new stone is lifted onto it instead of hanging off its edge.
+      const n = hit.face.normal.clone().transformDirection(hit.object.matrixWorld);
+      if (Math.abs(n.y) < 0.7) {
+        const h = new THREE.Vector2(n.x, n.z).normalize();
+        point = point.clone();
+        point.x -= h.x * SIDE_INSET;
+        point.z -= h.y * SIDE_INSET;
+      }
+    }
     this.aimXZ = point && Math.hypot(point.x, point.z) < outlineRadius(baseOutline(this.baseId)) + 3 ? [point.x, point.z] : null;
     this.recomputeGhost();
   }
